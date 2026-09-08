@@ -1,0 +1,42 @@
+# Unity generated directories
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# IDE and editor state
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local Codex and credentials
+.codex/
+.env
+.env.*
+*.pem
+*.pfx
+*.key
+secrets.*
+
+# Crash and temporary files
+sysinfo.txt
+*.tmp
+*.bak
+*.log
