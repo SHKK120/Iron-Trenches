@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Iron &amp; Trenches — Sector-Scoped Free Construction</title>
+  <title>Iron &amp; Trenches — 지역 범위 자유 건설</title>
   <style>
     :root {
       color-scheme: dark;
@@ -191,26 +191,26 @@
   <main>
     <header>
       <div>
-        <p class="kicker">RTS-CORE-02B · Blue Construction Command</p>
-        <h1>Sector-Scoped Free Construction</h1>
-        <p>먼저 Sector를 선택하고 건물을 고른 뒤, 그 Sector 안의 자유 위치에 Ghost를 움직여 배치하세요. 선택 정보만 믿지 않고 실제 위치와 전체 Footprint를 다시 검사합니다.</p>
+        <p class="kicker">RTS-CORE-02B · 청군 건설 지휘</p>
+        <h1>지역 범위 자유 건설</h1>
+        <p>먼저 지역을 선택하고 건물을 고른 뒤, 그 지역 안의 자유 위치로 배치 표시를 움직이세요. 선택 정보만 믿지 않고 실제 위치와 건물 범위 전체가 선택 지역 안에 있는지 다시 검사합니다.</p>
       </div>
-      <div class="hud" aria-label="Blue 경제 및 건설 상태">
-        <div class="hud-card"><span>Blue Balance</span><strong id="blue-balance">0</strong></div>
-        <div class="hud-card"><span>Next Income</span><strong id="blue-income">+65</strong></div>
-        <div class="hud-card"><span>Construction Sites</span><strong id="site-count">0</strong></div>
+      <div class="hud" aria-label="청군 경제 및 건설 상태">
+        <div class="hud-card"><span>청군 보유 자원</span><strong id="blue-balance">0</strong></div>
+        <div class="hud-card"><span>다음 수입</span><strong id="blue-income">+65</strong></div>
+        <div class="hud-card"><span>건설 현장 수</span><strong id="site-count">0</strong></div>
       </div>
     </header>
 
-    <p class="prototype-label">Prototype: rectangular sector fixture + circular footprint · No fixed build slots · Not final balance or geometry</p>
+    <p class="prototype-label">시험용 사각형 지역 + 원형 건물 범위 · 고정 건설 칸 없음 · 최종 밸런스나 지형 형태가 아님</p>
 
     <div class="workspace">
-      <section class="map-panel" aria-label="Sector 자유 건설 지도">
+      <section class="map-panel" aria-label="지역 자유 건설 지도">
         <div class="map-instruction">
-          <span><strong>1</strong> Sector 선택 → <strong>2</strong> 건물 선택 → <strong>3</strong> Ghost 이동 → <strong>4</strong> 위치 클릭</span>
-          <span>Green = Valid · Red = Invalid</span>
+          <span><strong>1</strong> 지역 선택 → <strong>2</strong> 건물 선택 → <strong>3</strong> 배치 표시 이동 → <strong>4</strong> 위치 클릭</span>
+          <span>초록 = 배치 가능 · 빨강 = 배치 불가</span>
         </div>
-        <svg id="battlefield" viewBox="0 0 900 600" role="application" aria-label="5 Sector construction test map">
+        <svg id="battlefield" viewBox="0 0 900 600" role="application" aria-label="5개 지역 건설 시험 지도">
           <rect class="sector-area" data-sector-area="north" x="300" y="0" width="300" height="200"></rect>
           <rect class="sector-area" data-sector-area="west" x="0" y="200" width="300" height="200"></rect>
           <rect class="sector-area" data-sector-area="center" x="300" y="200" width="300" height="200"></rect>
@@ -218,11 +218,11 @@
           <rect class="sector-area" data-sector-area="south" x="300" y="400" width="300" height="200"></rect>
 
           <g aria-hidden="true">
-            <text class="sector-name" x="450" y="60">NORTH</text><text class="sector-meta" data-sector-meta="north" x="450" y="83"></text>
-            <text class="sector-name" x="150" y="260">WEST</text><text class="sector-meta" data-sector-meta="west" x="150" y="283"></text>
-            <text class="sector-name" x="450" y="260">CENTER</text><text class="sector-meta" data-sector-meta="center" x="450" y="283"></text>
-            <text class="sector-name" x="750" y="260">EAST</text><text class="sector-meta" data-sector-meta="east" x="750" y="283"></text>
-            <text class="sector-name" x="450" y="460">SOUTH</text><text class="sector-meta" data-sector-meta="south" x="450" y="483"></text>
+            <text class="sector-name" x="450" y="60">북부</text><text class="sector-meta" data-sector-meta="north" x="450" y="83"></text>
+            <text class="sector-name" x="150" y="260">서부</text><text class="sector-meta" data-sector-meta="west" x="150" y="283"></text>
+            <text class="sector-name" x="450" y="260">중앙</text><text class="sector-meta" data-sector-meta="center" x="450" y="283"></text>
+            <text class="sector-name" x="750" y="260">동부</text><text class="sector-meta" data-sector-meta="east" x="750" y="283"></text>
+            <text class="sector-name" x="450" y="460">남부</text><text class="sector-meta" data-sector-meta="south" x="450" y="483"></text>
           </g>
 
           <line class="frontline" data-edge="west|center" x1="300" y1="210" x2="300" y2="390"></line>
@@ -230,74 +230,74 @@
           <line class="frontline" data-edge="center|north" x1="310" y1="200" x2="590" y2="200"></line>
           <line class="frontline" data-edge="center|south" x1="310" y1="400" x2="590" y2="400"></line>
 
-          <g class="anchor-button" data-anchor="north" tabindex="0" role="button" aria-label="North Control Anchor"><circle class="anchor" cx="450" cy="125" r="17"></circle><text class="anchor-label" x="450" y="130">A-N</text></g>
-          <g class="anchor-button" data-anchor="west" tabindex="0" role="button" aria-label="West Control Anchor"><circle class="anchor" cx="150" cy="330" r="17"></circle><text class="anchor-label" x="150" y="335">A-W</text></g>
-          <g class="anchor-button" data-anchor="center" tabindex="0" role="button" aria-label="Center Control Anchor"><circle class="anchor" cx="450" cy="330" r="17"></circle><text class="anchor-label" x="450" y="335">A-C</text></g>
-          <g class="anchor-button" data-anchor="east" tabindex="0" role="button" aria-label="East Control Anchor"><circle class="anchor" cx="750" cy="330" r="17"></circle><text class="anchor-label" x="750" y="335">A-E</text></g>
-          <g class="anchor-button" data-anchor="south" tabindex="0" role="button" aria-label="South Control Anchor"><circle class="anchor" cx="450" cy="530" r="17"></circle><text class="anchor-label" x="450" y="535">A-S</text></g>
+          <g class="anchor-button" data-anchor="north" tabindex="0" role="button" aria-label="북부 지휘 거점"><circle class="anchor" cx="450" cy="125" r="17"></circle><text class="anchor-label" x="450" y="130">북</text></g>
+          <g class="anchor-button" data-anchor="west" tabindex="0" role="button" aria-label="서부 지휘 거점"><circle class="anchor" cx="150" cy="330" r="17"></circle><text class="anchor-label" x="150" y="335">서</text></g>
+          <g class="anchor-button" data-anchor="center" tabindex="0" role="button" aria-label="중앙 지휘 거점"><circle class="anchor" cx="450" cy="330" r="17"></circle><text class="anchor-label" x="450" y="335">중</text></g>
+          <g class="anchor-button" data-anchor="east" tabindex="0" role="button" aria-label="동부 지휘 거점"><circle class="anchor" cx="750" cy="330" r="17"></circle><text class="anchor-label" x="750" y="335">동</text></g>
+          <g class="anchor-button" data-anchor="south" tabindex="0" role="button" aria-label="남부 지휘 거점"><circle class="anchor" cx="450" cy="530" r="17"></circle><text class="anchor-label" x="450" y="535">남</text></g>
 
-          <g id="sites-layer" aria-label="Construction Sites"></g>
+          <g id="sites-layer" aria-label="건설 현장"></g>
           <g id="ghost-layer" hidden>
             <circle id="ghost-footprint" class="ghost invalid" cx="0" cy="0" r="1"></circle>
-            <text id="ghost-label" class="ghost-label" x="0" y="0">INVALID</text>
+            <text id="ghost-label" class="ghost-label" x="0" y="0">배치 불가</text>
           </g>
         </svg>
       </section>
 
       <aside class="side-panel">
         <section class="panel-box sector-status" aria-live="polite">
-          <h2>Selected Sector</h2>
-          <strong id="selected-sector">Select a sector first</strong>
-          <span id="selected-owner">Map의 Sector 또는 Anchor를 클릭하세요.</span>
-          <span class="availability blocked" id="construction-availability">Construction unavailable</span>
+          <h2>선택한 지역</h2>
+          <strong id="selected-sector">지역을 먼저 선택하세요</strong>
+          <span id="selected-owner">지도의 지역 또는 지휘 거점을 클릭하세요.</span>
+          <span class="availability blocked" id="construction-availability">건설 불가</span>
         </section>
 
         <section class="panel-box">
-          <h2>Build Panel · [시험값]</h2>
+          <h2>건설 메뉴 · [시험값]</h2>
           <div class="build-grid">
-            <button class="build-button" type="button" data-building="barracks">Barracks<span>Cost 50 · Radius 18</span></button>
-            <button class="build-button" type="button" data-building="depot">Depot<span>Cost 35 · Radius 14</span></button>
+            <button class="build-button" type="button" data-building="barracks">병영<span>비용 50 · 반경 18</span></button>
+            <button class="build-button" type="button" data-building="depot">보급창<span>비용 35 · 반경 14</span></button>
           </div>
-          <div id="placement-status">Sector를 먼저 선택하세요.</div>
+          <div id="placement-status">지역을 먼저 선택하세요.</div>
         </section>
 
-        <section class="control-grid" aria-label="Preview controls">
-          <button class="action collect" id="collect-income" type="button">Collect Income</button>
-          <button class="action primary" id="capture-sector" type="button" disabled>Capture Selected Anchor</button>
-          <button class="action danger" id="cancel-placement" type="button">Cancel Placement</button>
-          <button class="action wide" id="reset-preview" type="button">Reset All</button>
+        <section class="control-grid" aria-label="미리보기 조작 버튼">
+          <button class="action collect" id="collect-income" type="button">수입 회수</button>
+          <button class="action primary" id="capture-sector" type="button" disabled>선택 거점 점령</button>
+          <button class="action danger" id="cancel-placement" type="button">배치 취소</button>
+          <button class="action wide" id="reset-preview" type="button">전체 초기화</button>
         </section>
 
         <section class="panel-box">
-          <h2>Current Frontline</h2>
+          <h2>현재 전선</h2>
           <div class="frontline-readout" id="frontline-readout"></div>
         </section>
 
         <section class="panel-box">
-          <h2>Construction Sites · Type / Owner / Sector</h2>
-          <ol class="site-list" id="site-list"><li>아직 Site 없음</li></ol>
+          <h2>건설 현장 · 종류 / 소유 / 지역</h2>
+          <ol class="site-list" id="site-list"><li>아직 건설 현장 없음</li></ol>
         </section>
 
         <section class="panel-box">
-          <h2>Event Log</h2>
+          <h2>진행 기록</h2>
           <ol class="event-log" id="event-log" aria-live="polite"></ol>
         </section>
       </aside>
     </div>
 
     <footer>
-      <span>Playable domain preview · no timer · no supply requirement</span>
-      <span>Not Unity Runtime / Not Source of Truth</span>
+      <span>조작 가능한 시험 화면 · 자동 시간 흐름 없음 · 보급 조건 미적용</span>
+      <span>Unity 실행 화면과 기술 정본이 아님</span>
     </footer>
   </main>
 
   <script>
     const sectors = Object.freeze({
-      west:   { name: "West",   income: 40, initialOwner: "Blue", bounds: [0, 300, 200, 400] },
-      center: { name: "Center", income: 60, initialOwner: "Red",  bounds: [300, 600, 200, 400] },
-      east:   { name: "East",   income: 50, initialOwner: "Red",  bounds: [600, 900, 200, 400] },
-      north:  { name: "North",  income: 35, initialOwner: "Red",  bounds: [300, 600, 0, 200] },
-      south:  { name: "South",  income: 25, initialOwner: "Blue", bounds: [300, 600, 400, 600] }
+      west:   { name: "서부", income: 40, initialOwner: "Blue", bounds: [0, 300, 200, 400] },
+      center: { name: "중앙", income: 60, initialOwner: "Red",  bounds: [300, 600, 200, 400] },
+      east:   { name: "동부", income: 50, initialOwner: "Red",  bounds: [600, 900, 200, 400] },
+      north:  { name: "북부", income: 35, initialOwner: "Red",  bounds: [300, 600, 0, 200] },
+      south:  { name: "남부", income: 25, initialOwner: "Blue", bounds: [300, 600, 400, 600] }
     });
 
     const topology = Object.freeze([
@@ -305,8 +305,8 @@
     ]);
 
     const buildings = Object.freeze({
-      barracks: { name: "Barracks", cost: 50, radius: 18, drawRadius: 54 },
-      depot: { name: "Depot", cost: 35, radius: 14, drawRadius: 42 }
+      barracks: { name: "병영", cost: 50, radius: 18, drawRadius: 54 },
+      depot: { name: "보급창", cost: 35, radius: 14, drawRadius: 42 }
     });
 
     const state = {
@@ -321,7 +321,7 @@
       state.selectedBuildingId = null;
       state.ghost = null;
       state.sites = [];
-      state.events = ["Scenario reset: select a Sector, then collect +65 and choose a building"];
+      state.events = ["시험 상태 초기화: 지역 선택 → 수입 회수 → 건물 선택 순서로 진행하세요"];
       state.nextSiteNumber = 1;
       render();
     }
@@ -359,57 +359,57 @@
     }
 
     function validatePlacement(x, y) {
-      if (!state.selectedSectorId) return { valid: false, reason: "Select a sector first" };
-      if (state.owners[state.selectedSectorId] !== "Blue") return { valid: false, reason: "Enemy Territory" };
-      if (!state.selectedBuildingId) return { valid: false, reason: "Select a building" };
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return { valid: false, reason: "Invalid Position" };
+      if (!state.selectedSectorId) return { valid: false, reason: "지역을 먼저 선택하세요" };
+      if (state.owners[state.selectedSectorId] !== "Blue") return { valid: false, reason: "적 영토" };
+      if (!state.selectedBuildingId) return { valid: false, reason: "건물을 선택하세요" };
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { valid: false, reason: "잘못된 위치" };
 
       const definition = buildings[state.selectedBuildingId];
       if (resolveSector(x, y) !== state.selectedSectorId) {
-        return { valid: false, reason: "Outside Selected Sector" };
+        return { valid: false, reason: "선택한 지역 밖입니다" };
       }
       if (!containsFootprint(state.selectedSectorId, x, y, definition.drawRadius)) {
-        return { valid: false, reason: "Footprint crosses sector boundary" };
+        return { valid: false, reason: "건물 범위가 지역 경계를 넘습니다" };
       }
-      if (overlapsSite(x, y, definition.drawRadius)) return { valid: false, reason: "Occupied" };
-      if (state.balance < definition.cost) return { valid: false, reason: "Insufficient Funds" };
-      return { valid: true, reason: `VALID · Sector: ${sectors[state.selectedSectorId].name}` };
+      if (overlapsSite(x, y, definition.drawRadius)) return { valid: false, reason: "이미 다른 건설 현장이 있습니다" };
+      if (state.balance < definition.cost) return { valid: false, reason: "자원이 부족합니다" };
+      return { valid: true, reason: `배치 가능 · 지역: ${sectors[state.selectedSectorId].name}` };
     }
 
     function selectSector(sectorId) {
-      if (!sectors[sectorId]) throw new Error(`Unknown sector: ${sectorId}`);
+      if (!sectors[sectorId]) throw new Error(`알 수 없는 지역: ${sectorId}`);
       state.selectedSectorId = sectorId;
       state.selectedBuildingId = null;
       state.ghost = null;
       const owner = state.owners[sectorId];
-      state.events.unshift(`${sectors[sectorId].name} selected · Owner: ${owner}`);
-      if (owner === "Blue") state.events.unshift(`Construction available in ${sectors[sectorId].name}`);
-      else state.events.unshift("Enemy Territory · Construction unavailable");
+      state.events.unshift(`${sectors[sectorId].name} 선택 · 소유: ${factionName(owner)}`);
+      if (owner === "Blue") state.events.unshift(`${sectors[sectorId].name}에서 건설할 수 있습니다`);
+      else state.events.unshift("적 영토 · 건설할 수 없습니다");
       render();
       return owner === "Blue";
     }
 
     function selectBuilding(buildingId) {
-      if (!buildings[buildingId]) throw new Error(`Unknown building: ${buildingId}`);
+      if (!buildings[buildingId]) throw new Error(`알 수 없는 건물: ${buildingId}`);
       if (!state.selectedSectorId) {
-        state.events.unshift("Placement rejected: Select a sector first");
+        state.events.unshift("배치 실패: 지역을 먼저 선택하세요");
         render();
         return false;
       }
       if (state.owners[state.selectedSectorId] !== "Blue") {
-        state.events.unshift("Placement rejected: Enemy Territory");
+        state.events.unshift("배치 실패: 적 영토입니다");
         render();
         return false;
       }
       state.selectedBuildingId = buildingId;
       state.ghost = null;
-      state.events.unshift(`${buildings[buildingId].name} selected for ${sectors[state.selectedSectorId].name}`);
+      state.events.unshift(`${sectors[state.selectedSectorId].name}에 지을 ${buildings[buildingId].name} 선택`);
       render();
       return true;
     }
 
     function moveGhostTo(x, y) {
-      if (!state.selectedBuildingId) return { valid: false, reason: "Select a building" };
+      if (!state.selectedBuildingId) return { valid: false, reason: "건물을 선택하세요" };
       const validation = validatePlacement(x, y);
       state.ghost = { x, y, ...validation };
       renderGhost();
@@ -417,11 +417,11 @@
     }
 
     function attemptPlacementAt(x, y) {
-      if (!state.selectedBuildingId) return { success: false, reason: "Select a building" };
+      if (!state.selectedBuildingId) return { success: false, reason: "건물을 선택하세요" };
       const validation = validatePlacement(x, y);
       if (!validation.valid) {
         state.ghost = { x, y, ...validation };
-        state.events.unshift(`Placement rejected: ${validation.reason}`);
+        state.events.unshift(`배치 실패: ${validation.reason}`);
         render();
         return { success: false, reason: validation.reason };
       }
@@ -439,7 +439,7 @@
         drawRadius: definition.drawRadius
       };
       state.sites.push(site);
-      state.events.unshift(`${definition.name} Site placed in ${sectors[site.sectorId].name} (-${definition.cost}): ${previousBalance} → ${state.balance}`);
+      state.events.unshift(`${sectors[site.sectorId].name}에 ${definition.name} 건설 현장 배치 (-${definition.cost}): ${previousBalance} → ${state.balance}`);
       state.selectedBuildingId = null;
       state.ghost = null;
       render();
@@ -450,7 +450,7 @@
       const amount = calculateIncome("Blue");
       const previous = state.balance;
       state.balance += amount;
-      state.events.unshift(`Blue collected +${amount}: ${previous} → ${state.balance}`);
+      state.events.unshift(`청군 수입 +${amount} 회수: ${previous} → ${state.balance}`);
       render();
       return amount;
     }
@@ -464,9 +464,9 @@
       state.owners[sectorId] = "Blue";
       state.selectedBuildingId = null;
       state.ghost = null;
-      state.events.unshift(`${sectors[sectorId].name} captured: ${previousOwner} → Blue`);
-      state.events.unshift(`Blue next income: +${previousIncome} → +${calculateIncome("Blue")}`);
-      state.events.unshift(`Construction now available in ${sectors[sectorId].name}`);
+      state.events.unshift(`${sectors[sectorId].name} 점령: ${factionName(previousOwner)} → 청군`);
+      state.events.unshift(`청군 다음 수입: +${previousIncome} → +${calculateIncome("Blue")}`);
+      state.events.unshift(`${sectors[sectorId].name}에서 이제 건설할 수 있습니다`);
       render();
       return true;
     }
@@ -474,12 +474,13 @@
     function cancelPlacement() {
       state.selectedBuildingId = null;
       state.ghost = null;
-      state.events.unshift("Placement mode cancelled · Sector selection retained");
+      state.events.unshift("건물 배치 취소 · 지역 선택은 유지됨");
       render();
     }
 
     function edgeKey(first, second) { return [first, second].sort().join("|"); }
     function edgeLabel([first, second]) { return `${sectors[first].name}–${sectors[second].name}`; }
+    function factionName(factionId) { return factionId === "Blue" ? "청군" : factionId === "Red" ? "적군" : factionId; }
 
     function renderGhost() {
       if (typeof document === "undefined") return;
@@ -489,8 +490,8 @@
         layer.hidden = true;
         status.className = "";
         status.textContent = state.selectedBuildingId
-          ? "Map 위에서 Ghost를 움직이세요."
-          : state.selectedSectorId ? "건물 종류를 선택하세요." : "Sector를 먼저 선택하세요.";
+          ? "지도 위에서 배치 표시를 움직이세요."
+          : state.selectedSectorId ? "건물 종류를 선택하세요." : "지역을 먼저 선택하세요.";
         return;
       }
 
@@ -504,7 +505,7 @@
       circle.setAttribute("class", `ghost ${state.ghost.valid ? "valid" : "invalid"}`);
       label.setAttribute("x", state.ghost.x);
       label.setAttribute("y", state.ghost.y + 5);
-      label.textContent = state.ghost.valid ? "VALID" : "INVALID";
+      label.textContent = state.ghost.valid ? "가능" : "불가";
       status.className = state.ghost.valid ? "valid" : "invalid";
       status.textContent = state.ghost.reason;
     }
@@ -514,7 +515,7 @@
       for (const [sectorId, sector] of Object.entries(sectors)) {
         const area = document.querySelector(`[data-sector-area="${sectorId}"]`);
         area.setAttribute("class", `sector-area ${state.owners[sectorId].toLowerCase()}${state.selectedSectorId === sectorId ? " selected" : ""}`);
-        document.querySelector(`[data-sector-meta="${sectorId}"]`).textContent = `Owner ${state.owners[sectorId]} · Income ${sector.income}`;
+        document.querySelector(`[data-sector-meta="${sectorId}"]`).textContent = `소유 ${factionName(state.owners[sectorId])} · 수입 ${sector.income}`;
       }
 
       const activeFrontlines = new Set(deriveFrontlines().map(edge => edgeKey(...edge)));
@@ -525,7 +526,7 @@
       document.getElementById("blue-balance").textContent = state.balance;
       document.getElementById("blue-income").textContent = `+${calculateIncome("Blue")}`;
       document.getElementById("site-count").textContent = state.sites.length;
-      document.getElementById("frontline-readout").textContent = deriveFrontlines().map(edgeLabel).join(" · ") || "현재 Frontline 없음";
+      document.getElementById("frontline-readout").textContent = deriveFrontlines().map(edgeLabel).join(" · ") || "현재 전선 없음";
 
       const selected = state.selectedSectorId;
       const selectedName = document.getElementById("selected-sector");
@@ -534,19 +535,19 @@
       const captureButton = document.getElementById("capture-sector");
       if (selected) {
         const owner = state.owners[selected];
-        selectedName.textContent = `BUILD IN: ${sectors[selected].name.toUpperCase()}`;
-        selectedOwner.textContent = `Owner: ${owner} · Income ${sectors[selected].income}`;
-        availability.textContent = owner === "Blue" ? "Construction available" : "Enemy Territory · Construction unavailable";
+        selectedName.textContent = `건설 지역: ${sectors[selected].name}`;
+        selectedOwner.textContent = `소유: ${factionName(owner)} · 수입 ${sectors[selected].income}`;
+        availability.textContent = owner === "Blue" ? "건설 가능" : "적 영토 · 건설 불가";
         availability.className = `availability ${owner === "Blue" ? "available" : "blocked"}`;
         captureButton.disabled = owner === "Blue";
-        captureButton.textContent = owner === "Blue" ? "Already Blue" : `Capture ${sectors[selected].name} Anchor`;
+        captureButton.textContent = owner === "Blue" ? "이미 청군 소유" : `${sectors[selected].name} 거점 점령`;
       } else {
-        selectedName.textContent = "Select a sector first";
-        selectedOwner.textContent = "Map의 Sector 또는 Anchor를 클릭하세요.";
-        availability.textContent = "Construction unavailable";
+        selectedName.textContent = "지역을 먼저 선택하세요";
+        selectedOwner.textContent = "지도의 지역 또는 지휘 거점을 클릭하세요.";
+        availability.textContent = "건설 불가";
         availability.className = "availability blocked";
         captureButton.disabled = true;
-        captureButton.textContent = "Capture Selected Anchor";
+        captureButton.textContent = "선택 거점 점령";
       }
 
       document.querySelectorAll("[data-building]").forEach(button => {
@@ -554,14 +555,14 @@
       });
 
       document.getElementById("sites-layer").innerHTML = state.sites.map(site => {
-        const label = buildings[site.buildingId].name === "Barracks" ? "B" : "D";
+        const label = site.buildingId === "barracks" ? "병" : "보";
         return `<g data-site="${site.siteId}"><circle class="site-footprint" cx="${site.x}" cy="${site.y}" r="${site.drawRadius}"></circle><rect class="site-core" x="${site.x - 15}" y="${site.y - 12}" width="30" height="24" rx="4"></rect><text class="site-label" x="${site.x}" y="${site.y + 4}">${label}</text></g>`;
       }).join("");
 
       const siteList = document.getElementById("site-list");
       siteList.innerHTML = state.sites.length
-        ? state.sites.map(site => `<li><strong>${buildings[site.buildingId].name} Site</strong> · Owner: ${site.ownerId} · Sector: ${sectors[site.sectorId].name} · (${site.x.toFixed(1)}, ${site.y.toFixed(1)})</li>`).join("")
-        : "<li>아직 Site 없음</li>";
+        ? state.sites.map(site => `<li><strong>${buildings[site.buildingId].name} 건설 현장</strong> · 소유: ${factionName(site.ownerId)} · 지역: ${sectors[site.sectorId].name} · (${site.x.toFixed(1)}, ${site.y.toFixed(1)})</li>`).join("")
+        : "<li>아직 건설 현장 없음</li>";
       document.getElementById("event-log").innerHTML = state.events.map(event => `<li>${event}</li>`).join("");
       renderGhost();
     }
