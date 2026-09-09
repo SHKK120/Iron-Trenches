@@ -97,16 +97,43 @@ else {
     Write-CheckResult 'PASS' 'Foundation files' "$($requiredFiles.Count) required files found"
 }
 
+$sourceDotnetPath = $null
 $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
 $unityDotnetPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Data\DotNetSdk\dotnet.exe"
 if ($dotnetCommand -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $dotnetCommand.Source) 'sdk/8.0.318'))) {
+    $sourceDotnetPath = $dotnetCommand.Source
     Write-CheckResult 'PASS' 'Source-only .NET SDK' "8.0.318 — $($dotnetCommand.Source)"
 }
 elseif ((Test-Path -LiteralPath $unityDotnetPath) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $unityDotnetPath) 'sdk/8.0.318'))) {
+    $sourceDotnetPath = $unityDotnetPath
     Write-CheckResult 'PASS' 'Source-only .NET SDK' "$unityDotnetPath — verified managed-PC fallback"
 }
 else {
     Write-CheckResult 'BLOCKED' 'Source-only .NET SDK' 'not found; use an approved official .NET 8 SDK installation path and do not install Unity only for this check'
+}
+
+$managedChecksProject = Join-Path $repoRoot 'tools/ManagedPcChecks/ManagedPcChecks.csproj'
+$managedChecksOutput = Join-Path $repoRoot 'Game/Temp/ManagedPcChecks'
+if ($sourceDotnetPath) {
+    $buildOutput = & $sourceDotnetPath build $managedChecksProject --configuration Release --output $managedChecksOutput --nologo 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-CheckResult 'FAIL' 'ManagedPcChecks build' (($buildOutput | Out-String).Trim())
+    }
+    else {
+        Write-CheckResult 'PASS' 'ManagedPcChecks build' 'Release build completed with warnings treated as errors'
+        $checksAssembly = Join-Path $managedChecksOutput 'ManagedPcChecks.dll'
+        $checksOutput = & $sourceDotnetPath $checksAssembly 2>&1
+        $checksText = (($checksOutput | Out-String).Trim())
+        if ($LASTEXITCODE -eq 0 -and $checksText -match '^PASS ManagedPcChecks \(\d+ assertions\)$') {
+            Write-CheckResult 'PASS' 'ManagedPcChecks run' $checksText
+        }
+        else {
+            Write-CheckResult 'FAIL' 'ManagedPcChecks run' $checksText
+        }
+    }
+}
+else {
+    Write-CheckResult 'SKIP' 'ManagedPcChecks' 'Source-only .NET SDK is unavailable'
 }
 
 $previewPath = Join-Path $repoRoot 'previews/index.html'
