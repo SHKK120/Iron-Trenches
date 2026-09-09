@@ -88,8 +88,8 @@ else {
 $dashboardPath = Join-Path $repoRoot 'docs/40_구현순서.md'
 if (Test-Path -LiteralPath $dashboardPath) {
     $dashboard = Get-Content -Raw -LiteralPath $dashboardPath
-    if ($dashboard -match '## 다음 구현 Bundle' -and $dashboard -match 'DEV-BOOT-01') {
-        Write-CheckResult 'PASS' 'Next Result Bundle' 'DEV-BOOT-01 found in docs/40_구현순서.md'
+    if ($dashboard -match '## 정상 PC 병행 재개 Bundle' -and $dashboard -match 'DEV-BOOT-RESUME-01') {
+        Write-CheckResult 'PASS' 'Next Result Bundle' 'DEV-BOOT-RESUME-01 found in docs/40_구현순서.md'
     }
     else {
         Write-CheckResult 'FAIL' 'Next Result Bundle' 'expected dashboard marker not found'
@@ -277,6 +277,43 @@ if (Test-Path -LiteralPath $unityVersionPath) {
 }
 else {
     Write-CheckResult 'FAIL' 'Unity project' "missing $unityVersionPath"
+}
+
+$unityManifestPath = Join-Path $unityProjectRoot 'Packages/manifest.json'
+if (Test-Path -LiteralPath $unityManifestPath) {
+    try {
+        $unityManifest = Get-Content -Raw -LiteralPath $unityManifestPath | ConvertFrom-Json
+        $urpVersion = $unityManifest.dependencies.'com.unity.render-pipelines.universal'
+        $inputVersion = $unityManifest.dependencies.'com.unity.inputsystem'
+
+        if ($urpVersion -eq '17.6.0') {
+            Write-CheckResult 'PASS' 'URP package' $urpVersion
+        }
+        else {
+            Write-CheckResult 'FAIL' 'URP package' "expected 17.6.0, found $urpVersion"
+        }
+
+        if ($inputVersion -eq '1.20.0') {
+            Write-CheckResult 'PASS' 'Input System package' $inputVersion
+        }
+        else {
+            Write-CheckResult 'FAIL' 'Input System package' "expected 1.20.0, found $inputVersion"
+        }
+    }
+    catch {
+        Write-CheckResult 'FAIL' 'Unity package manifest' 'manifest.json could not be read'
+    }
+}
+else {
+    Write-CheckResult 'FAIL' 'Unity package manifest' "missing $unityManifestPath"
+}
+
+$mainDevScenePath = Join-Path $unityProjectRoot 'Assets/Scenes/SampleScene.unity'
+if (Test-Path -LiteralPath $mainDevScenePath) {
+    Write-CheckResult 'PASS' 'Main Dev Scene' $mainDevScenePath
+}
+else {
+    Write-CheckResult 'FAIL' 'Main Dev Scene' "missing $mainDevScenePath"
 }
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot '.agents/skills/wwi-recovery-smoke/SKILL.md')) {

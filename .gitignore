@@ -14,6 +14,7 @@ UserSettings/
 .vscode/
 .idea/
 *.csproj
+!tools/ManagedPcChecks/ManagedPcChecks.csproj
 *.sln
 *.suo
 *.user
