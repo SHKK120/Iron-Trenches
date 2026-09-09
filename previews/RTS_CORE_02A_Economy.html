@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — Sector Economy Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #090e0b;
+      color: #f4f2e5;
+      --blue: #4eadef;
+      --blue-dark: #163c58;
+      --red: #e06d62;
+      --red-dark: #572520;
+      --gold: #f1c95b;
+      --panel: rgba(18, 25, 19, 0.97);
+      --line: #566053;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(213, 194, 126, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(213, 194, 126, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 50% 15%, #273126 0, #111711 42%, #070a08 84%);
+      background-size: 30px 30px, 30px 30px, auto;
+    }
+
+    main { width: min(1260px, calc(100% - 28px)); margin: 22px auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 22px;
+      margin-bottom: 16px;
+    }
+
+    .kicker,
+    .prototype-label {
+      margin: 0 0 8px;
+      color: #d9be6b;
+      font-size: 0.74rem;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.7rem); }
+    header p:not(.kicker) { max-width: 650px; margin: 8px 0 0; color: #b7c1ae; }
+
+    .hud {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(150px, 1fr));
+      gap: 10px;
+      min-width: min(520px, 100%);
+    }
+
+    .hud-card {
+      padding: 12px 14px;
+      border: 1px solid #4b5648;
+      border-radius: 10px;
+      background: #111812;
+    }
+
+    .hud-card span { display: block; color: #909c8b; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .hud-card strong { display: block; margin-top: 5px; color: #f7d979; font-size: 1.25rem; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; }
+    .map-panel, .side-panel { border: 1px solid #465044; border-radius: 16px; background: var(--panel); box-shadow: 0 24px 68px rgba(0, 0, 0, 0.34); }
+    .map-panel { padding: 15px; }
+
+    .territory-map {
+      position: relative;
+      min-height: 650px;
+      overflow: hidden;
+      border: 1px solid #343d34;
+      border-radius: 12px;
+      background: radial-gradient(circle at center, rgba(230, 204, 117, 0.08), transparent 52%), #0d130f;
+    }
+
+    svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .connection-shadow, .connection { vector-effect: non-scaling-stroke; stroke-linecap: round; }
+    .connection-shadow { stroke: #070a08; stroke-width: 12; }
+    .connection { stroke: var(--line); stroke-width: 5; transition: stroke 180ms ease, filter 180ms ease; }
+    .connection.frontline { stroke: var(--gold); filter: drop-shadow(0 0 7px var(--gold)); }
+
+    .sector {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: 178px;
+      min-height: 148px;
+      padding: 12px;
+      transform: translate(-50%, -50%);
+      border: 2px solid;
+      border-radius: 14px;
+      text-align: center;
+      transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .sector.blue { border-color: var(--blue); background: linear-gradient(150deg, rgba(35, 104, 151, 0.88), var(--blue-dark)); }
+    .sector.red { border-color: var(--red); background: linear-gradient(150deg, rgba(144, 56, 48, 0.9), var(--red-dark)); }
+    .sector.selected { box-shadow: 0 0 0 4px rgba(241, 201, 91, 0.34), 0 0 28px rgba(241, 201, 91, 0.32); }
+
+    .sector h2 { margin: 0; font-size: 1.08rem; letter-spacing: 0.04em; }
+    .sector-owner { margin: 4px 0; color: #f0f3e9; font-size: 0.8rem; font-weight: 850; }
+    .sector-income { display: inline-block; margin-bottom: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(7, 10, 8, 0.55); color: #f7dc83; font-size: 0.75rem; font-weight: 900; }
+
+    .anchor {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      border-radius: 8px;
+      background: rgba(7, 11, 8, 0.73);
+      color: #fff8dc;
+      font: inherit;
+      font-size: 0.77rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .anchor::before { content: "◆ "; color: var(--gold); }
+    .anchor:hover, .anchor:focus-visible { border-color: var(--gold); outline: none; }
+
+    .side-panel { display: flex; flex-direction: column; padding: 20px; }
+    .side-panel h2 { margin: 0 0 10px; color: #d7dfce; font-size: 0.98rem; }
+
+    .selection, .frontline-readout {
+      padding: 13px;
+      border: 1px solid #3b453a;
+      border-radius: 10px;
+      background: #0b110d;
+    }
+
+    .selection { min-height: 132px; }
+    .selection strong { display: block; margin-bottom: 8px; color: #f1d67d; }
+    .selection dl { display: grid; grid-template-columns: 70px 1fr; gap: 6px; margin: 0; font-size: 0.82rem; }
+    .selection dt { color: #8f9a89; }
+    .selection dd { margin: 0; font-weight: 760; }
+    .frontline-readout { color: #ecd178; font-size: 0.8rem; font-weight: 800; line-height: 1.5; }
+
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 12px 0 20px; }
+    .controls .reset { grid-column: 1 / -1; }
+
+    button.action {
+      padding: 11px 10px;
+      border: 1px solid #66715e;
+      border-radius: 8px;
+      background: #333d2e;
+      color: #f5f3e7;
+      font: inherit;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    button.action.primary { border-color: #d3b54f; background: #6b5a26; }
+    button.action.collect { border-color: #529bd0; background: #234e6c; }
+    button.action:hover:not(:disabled) { filter: brightness(1.15); }
+    button.action:disabled { cursor: not-allowed; opacity: 0.42; }
+
+    .event-log {
+      flex: 1;
+      min-height: 180px;
+      max-height: 245px;
+      margin: 0;
+      padding: 10px 10px 10px 28px;
+      overflow: auto;
+      border: 1px solid #3b453a;
+      border-radius: 10px;
+      background: #090e0b;
+      color: #bdc7b4;
+      font-size: 0.76rem;
+      line-height: 1.5;
+    }
+
+    .event-log li + li { margin-top: 6px; }
+
+    footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 11px; color: #879182; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; }
+
+    @media (max-width: 980px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .hud { min-width: 0; width: 100%; }
+      .workspace { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 580px) {
+      .hud { grid-template-columns: 1fr; }
+      .territory-map { min-height: 720px; }
+      .sector { width: 142px; min-height: 138px; }
+      .sector[data-sector="west"] { --x: 24% !important; }
+      .sector[data-sector="east"] { --x: 76% !important; }
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">Blue War Economy</p>
+        <h1>Sector Income + Territory Expansion</h1>
+        <p>수입 회수와 Center 점령을 직접 적용해 영토 확대가 다음 Collection을 늘리는지 확인하세요.</p>
+      </div>
+      <div class="hud" aria-label="Blue 시험 경제 상태">
+        <div class="hud-card"><span>Balance</span><strong id="blue-balance">0</strong></div>
+        <div class="hud-card"><span>Next Collection</span><strong id="blue-income">+0</strong></div>
+        <div class="hud-card"><span>Controlled Sectors</span><strong id="blue-sector-count">0 / 5</strong></div>
+      </div>
+    </header>
+
+    <p class="prototype-label">Prototype single-resource economy · Final national economy model undecided</p>
+
+    <div class="workspace">
+      <section class="map-panel" aria-label="Sector 경제 전략 지도">
+        <div class="territory-map">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <line class="connection-shadow" x1="18" y1="50" x2="50" y2="50"></line>
+            <line class="connection" data-edge="west|center" x1="18" y1="50" x2="50" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="50" x2="82" y2="50"></line>
+            <line class="connection" data-edge="center|east" x1="50" y1="50" x2="82" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="17" x2="50" y2="50"></line>
+            <line class="connection" data-edge="center|north" x1="50" y1="17" x2="50" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="50" x2="50" y2="83"></line>
+            <line class="connection" data-edge="center|south" x1="50" y1="50" x2="50" y2="83"></line>
+          </svg>
+
+          <article class="sector" data-sector="west" style="--x: 18%; --y: 50%;">
+            <h2>West</h2><p class="sector-owner"></p><span class="sector-income"></span>
+            <button class="anchor" type="button" data-anchor="anchor-west">Anchor-W</button>
+          </article>
+          <article class="sector" data-sector="center" style="--x: 50%; --y: 50%;">
+            <h2>Center</h2><p class="sector-owner"></p><span class="sector-income"></span>
+            <button class="anchor" type="button" data-anchor="anchor-center">Anchor-C</button>
+          </article>
+          <article class="sector" data-sector="east" style="--x: 82%; --y: 50%;">
+            <h2>East</h2><p class="sector-owner"></p><span class="sector-income"></span>
+            <button class="anchor" type="button" data-anchor="anchor-east">Anchor-E</button>
+          </article>
+          <article class="sector" data-sector="north" style="--x: 50%; --y: 17%;">
+            <h2>North</h2><p class="sector-owner"></p><span class="sector-income"></span>
+            <button class="anchor" type="button" data-anchor="anchor-north">Anchor-N</button>
+          </article>
+          <article class="sector" data-sector="south" style="--x: 50%; --y: 83%;">
+            <h2>South</h2><p class="sector-owner"></p><span class="sector-income"></span>
+            <button class="anchor" type="button" data-anchor="anchor-south">Anchor-S</button>
+          </article>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <h2>선택한 Control Anchor</h2>
+        <div class="selection" id="selection" aria-live="polite"><strong>거점을 선택하세요</strong></div>
+
+        <div class="controls">
+          <button class="action collect" id="collect-income" type="button">수입 회수 시험</button>
+          <button class="action primary" id="complete-capture" type="button" disabled>점령 완료 시험</button>
+          <button class="action reset" id="reset-preview" type="button">전체 Reset</button>
+        </div>
+
+        <h2>현재 Frontline</h2>
+        <div class="frontline-readout" id="frontline-readout" aria-live="polite"></div>
+
+        <h2 style="margin-top: 18px;">Event Log</h2>
+        <ol class="event-log" id="event-log" aria-live="polite"></ol>
+      </aside>
+    </div>
+
+    <footer>
+      <span>Playable domain preview</span>
+      <span>Not Unity Runtime / Not Source of Truth</span>
+    </footer>
+  </main>
+
+  <script>
+    const sectors = Object.freeze({
+      west: { name: "West", anchorName: "Anchor-W", income: 40, initialOwner: "Blue" },
+      center: { name: "Center", anchorName: "Anchor-C", income: 60, initialOwner: "Red" },
+      east: { name: "East", anchorName: "Anchor-E", income: 50, initialOwner: "Red" },
+      north: { name: "North", anchorName: "Anchor-N", income: 35, initialOwner: "Red" },
+      south: { name: "South", anchorName: "Anchor-S", income: 25, initialOwner: "Blue" }
+    });
+
+    const topology = Object.freeze([
+      ["west", "center"],
+      ["center", "east"],
+      ["center", "north"],
+      ["center", "south"]
+    ]);
+
+    const state = { owners: {}, blueBalance: 0, selectedSectorId: null, events: [] };
+
+    function resetState() {
+      state.owners = Object.fromEntries(
+        Object.entries(sectors).map(([id, sector]) => [id, sector.initialOwner])
+      );
+      state.blueBalance = 0;
+      state.selectedSectorId = null;
+      state.events = ["Scenario reset: Blue Balance 0 / Next Collection +65"];
+    }
+
+    function calculateIncome(factionId) {
+      return Object.entries(sectors).reduce(
+        (total, [id, sector]) => total + (state.owners[id] === factionId ? sector.income : 0),
+        0
+      );
+    }
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => state.owners[first] !== state.owners[second]);
+    }
+
+    function edgeKey(first, second) {
+      return [first, second].sort().join("|");
+    }
+
+    function edgeLabel([first, second]) {
+      return `${sectors[first].name}–${sectors[second].name}`;
+    }
+
+    function selectSector(sectorId) {
+      if (!sectors[sectorId]) {
+        throw new Error(`Unknown sector: ${sectorId}`);
+      }
+      state.selectedSectorId = sectorId;
+      render();
+    }
+
+    function collectBlueIncome() {
+      const amount = calculateIncome("Blue");
+      const previous = state.blueBalance;
+      state.blueBalance += amount;
+      state.events.unshift(`Blue collected +${amount}: ${previous} → ${state.blueBalance}`);
+      render();
+    }
+
+    function completeSelectedCapture() {
+      const sectorId = state.selectedSectorId;
+      if (!sectorId) return;
+
+      const previousOwner = state.owners[sectorId];
+      if (previousOwner === "Blue") {
+        state.events.unshift(`${sectors[sectorId].anchorName}: already Blue — no change`);
+        render();
+        return;
+      }
+
+      const beforeIncome = calculateIncome("Blue");
+      const beforeFrontlines = deriveFrontlines();
+      const beforeKeys = new Set(beforeFrontlines.map(edge => edgeKey(...edge)));
+      state.owners[sectorId] = "Blue";
+      const afterIncome = calculateIncome("Blue");
+      const afterFrontlines = deriveFrontlines();
+      const afterKeys = new Set(afterFrontlines.map(edge => edgeKey(...edge)));
+      const removed = beforeFrontlines.filter(edge => !afterKeys.has(edgeKey(...edge)));
+      const added = afterFrontlines.filter(edge => !beforeKeys.has(edgeKey(...edge)));
+
+      state.events.unshift(`Blue economy increased: +${beforeIncome} → +${afterIncome}`);
+      state.events.unshift(`Frontline updated: -${removed.map(edgeLabel).join(", ") || "none"} / +${added.map(edgeLabel).join(", ") || "none"}`);
+      state.events.unshift(`${sectors[sectorId].name} captured: ${previousOwner} → Blue`);
+      render();
+    }
+
+    function render() {
+      for (const [sectorId, sector] of Object.entries(sectors)) {
+        const element = document.querySelector(`[data-sector="${sectorId}"]`);
+        const owner = state.owners[sectorId];
+        element.className = `sector ${owner.toLowerCase()}${state.selectedSectorId === sectorId ? " selected" : ""}`;
+        element.querySelector(".sector-owner").textContent = `Owner: ${owner}`;
+        element.querySelector(".sector-income").textContent = `Income ${sector.income}`;
+        element.querySelector(".anchor").setAttribute("aria-label", `${sector.anchorName}, ${sector.name}, ${owner}, Income ${sector.income}`);
+      }
+
+      const frontlines = deriveFrontlines();
+      const frontlineKeys = new Set(frontlines.map(edge => edgeKey(...edge)));
+      document.querySelectorAll("[data-edge]").forEach(line => {
+        line.classList.toggle("frontline", frontlineKeys.has(edgeKey(...line.dataset.edge.split("|"))));
+      });
+
+      const blueIncome = calculateIncome("Blue");
+      const blueSectorCount = Object.values(state.owners).filter(owner => owner === "Blue").length;
+      document.getElementById("blue-balance").textContent = state.blueBalance;
+      document.getElementById("blue-income").textContent = `+${blueIncome}`;
+      document.getElementById("blue-sector-count").textContent = `${blueSectorCount} / ${Object.keys(sectors).length}`;
+      document.getElementById("frontline-readout").textContent = frontlines.map(edgeLabel).join(" · ") || "현재 Frontline 없음";
+
+      const selection = document.getElementById("selection");
+      const captureButton = document.getElementById("complete-capture");
+      if (state.selectedSectorId) {
+        const sector = sectors[state.selectedSectorId];
+        const owner = state.owners[state.selectedSectorId];
+        selection.innerHTML = `<strong>${sector.anchorName}</strong><dl><dt>Sector</dt><dd>${sector.name}</dd><dt>Owner</dt><dd>${owner}</dd><dt>Income</dt><dd>${sector.income}</dd></dl>`;
+        captureButton.disabled = owner === "Blue";
+        captureButton.textContent = owner === "Blue" ? "이미 Blue 소유" : "점령 완료 시험";
+      } else {
+        selection.innerHTML = "<strong>거점을 선택하세요</strong><span>Red Control Anchor를 선택해 점령을 시험합니다.</span>";
+        captureButton.disabled = true;
+        captureButton.textContent = "점령 완료 시험";
+      }
+
+      document.getElementById("event-log").innerHTML = state.events.map(event => `<li>${event}</li>`).join("");
+    }
+
+    document.querySelectorAll("[data-anchor]").forEach(anchor => {
+      anchor.addEventListener("click", () => selectSector(anchor.closest("[data-sector]").dataset.sector));
+    });
+    document.getElementById("collect-income").addEventListener("click", collectBlueIncome);
+    document.getElementById("complete-capture").addEventListener("click", completeSelectedCapture);
+    document.getElementById("reset-preview").addEventListener("click", () => { resetState(); render(); });
+
+    resetState();
+    render();
+  </script>
+</body>
+</html>

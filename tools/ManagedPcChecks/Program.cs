@@ -291,4 +291,169 @@ Expect(!crossAfterCapture.Contains(crossCenterEast), "Captured center-east bound
 Expect(crossAfterCapture.Contains(crossCenterNorth), "Center-north frontline was lost after east capture.");
 Expect(crossAfterCapture.Contains(crossCenterSouth), "Center-south frontline was lost after east capture.");
 
+var incomeProfile = new SectorIncomeProfile("income-west", 40);
+Expect(incomeProfile.SectorId == "income-west", "Income profile sector id was not retained.");
+Expect(incomeProfile.IncomeValue == 40, "Income profile value was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new SectorIncomeProfile(" ", 40),
+    "Blank income profile sector id was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new SectorIncomeProfile("income-negative", -1),
+    "Negative sector income was accepted.");
+Expect(
+    new SectorIncomeProfile("income-zero", 0).IncomeValue == 0,
+    "Zero-income sector was not accepted.");
+
+var initialEconomy = new EconomyState("blue", 25);
+Expect(initialEconomy.FactionId == "blue", "Economy faction id was not retained.");
+Expect(initialEconomy.Balance == 25, "Initial economy balance was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new EconomyState("", 0),
+    "Blank economy faction id was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new EconomyState("blue", -1),
+    "Negative initial economy balance was accepted.");
+
+var economyTopology = new SectorTopology();
+foreach (var sectorId in new[] { "economy-west", "economy-center", "economy-east", "economy-north", "economy-south" })
+{
+    economyTopology.RegisterSector(sectorId);
+}
+
+economyTopology.AddBidirectionalAdjacency("economy-west", "economy-center");
+economyTopology.AddBidirectionalAdjacency("economy-center", "economy-east");
+economyTopology.AddBidirectionalAdjacency("economy-center", "economy-north");
+economyTopology.AddBidirectionalAdjacency("economy-center", "economy-south");
+
+var economyWest = new SectorState("economy-west", "blue");
+var economyCenter = new SectorState("economy-center", "red");
+var economyEast = new SectorState("economy-east", "red");
+var economyNorth = new SectorState("economy-north", "red");
+var economySouth = new SectorState("economy-south", "blue");
+var economyTerritory = new TerritoryGraph(
+    economyTopology,
+    new[] { economyWest, economyCenter, economyEast, economyNorth, economySouth },
+    new[]
+    {
+        new SectorControlAnchor("economy-anchor-west", "economy-west"),
+        new SectorControlAnchor("economy-anchor-center", "economy-center"),
+        new SectorControlAnchor("economy-anchor-east", "economy-east"),
+        new SectorControlAnchor("economy-anchor-north", "economy-north"),
+        new SectorControlAnchor("economy-anchor-south", "economy-south")
+    });
+var economyProfiles = new[]
+{
+    new SectorIncomeProfile("economy-west", 40),
+    new SectorIncomeProfile("economy-center", 60),
+    new SectorIncomeProfile("economy-east", 50),
+    new SectorIncomeProfile("economy-north", 35),
+    new SectorIncomeProfile("economy-south", 25)
+};
+
+Expect(
+    SectorIncomeResolver.Resolve(economyTerritory, economyProfiles, "blue") == 65,
+    "Blue income did not include only blue-owned sectors.");
+Expect(
+    SectorIncomeResolver.Resolve(economyTerritory, economyProfiles, "red") == 145,
+    "Red income did not include only red-owned sectors.");
+Expect(
+    SectorIncomeResolver.Resolve(economyTerritory, economyProfiles, "green") == 0,
+    "Faction with no owned sectors did not resolve zero income.");
+
+ExpectThrows<ArgumentException>(
+    () => SectorIncomeResolver.Resolve(
+        economyTerritory,
+        new[]
+        {
+            new SectorIncomeProfile("economy-west", 40),
+            new SectorIncomeProfile("economy-west", 80),
+            new SectorIncomeProfile("economy-center", 60),
+            new SectorIncomeProfile("economy-east", 50),
+            new SectorIncomeProfile("economy-north", 35),
+            new SectorIncomeProfile("economy-south", 25)
+        },
+        "blue"),
+    "Duplicate sector income profile was accepted.");
+ExpectThrows<ArgumentException>(
+    () => SectorIncomeResolver.Resolve(
+        economyTerritory,
+        new[]
+        {
+            new SectorIncomeProfile("economy-west", 40),
+            new SectorIncomeProfile("economy-center", 60),
+            new SectorIncomeProfile("economy-east", 50),
+            new SectorIncomeProfile("economy-south", 25)
+        },
+        "blue"),
+    "Missing sector income profile was accepted.");
+ExpectThrows<ArgumentException>(
+    () => SectorIncomeResolver.Resolve(
+        economyTerritory,
+        economyProfiles.Append(new SectorIncomeProfile("economy-outside", 10)),
+        "blue"),
+    "Income profile for an unregistered sector was accepted.");
+
+var repeatedEconomy = new EconomyState("blue", 0);
+var firstRepeatedCollection = SectorIncomeCollector.Collect(
+    economyTerritory,
+    economyProfiles,
+    repeatedEconomy);
+var secondRepeatedCollection = SectorIncomeCollector.Collect(
+    economyTerritory,
+    economyProfiles,
+    repeatedEconomy);
+Expect(firstRepeatedCollection.CollectedAmount == 65, "First repeated collection amount was incorrect.");
+Expect(firstRepeatedCollection.PreviousBalance == 0, "First repeated collection previous balance was incorrect.");
+Expect(firstRepeatedCollection.NewBalance == 65, "First repeated collection new balance was incorrect.");
+Expect(secondRepeatedCollection.PreviousBalance == 65, "Second collection did not start at the first balance.");
+Expect(secondRepeatedCollection.NewBalance == 130, "Second collection did not accumulate income.");
+Expect(repeatedEconomy.Balance == 130, "Economy state did not retain accumulated income.");
+
+var blueEconomy = new EconomyState("blue", 0);
+var blueInitialCollection = SectorIncomeCollector.Collect(
+    economyTerritory,
+    economyProfiles,
+    blueEconomy);
+Expect(blueInitialCollection.FactionId == "blue", "Collection result lost the faction id.");
+Expect(blueInitialCollection.CollectedAmount == 65, "Initial integrated blue collection was not 65.");
+Expect(blueEconomy.Balance == 65, "Initial integrated blue balance was not 65.");
+
+var redEconomy = new EconomyState("red", 0);
+var redCollection = SectorIncomeCollector.Collect(economyTerritory, economyProfiles, redEconomy);
+Expect(redCollection.CollectedAmount == 145, "Initial red collection was not 145.");
+Expect(redEconomy.Balance == 145, "Red balance did not receive red income.");
+Expect(blueEconomy.Balance == 65, "Red collection changed the blue balance.");
+
+var economyBeforeCaptureFrontlines = economyTerritory.GetFrontlines();
+Expect(
+    economyBeforeCaptureFrontlines.Contains(new FrontlineEdge("economy-west", "economy-center")),
+    "Economy fixture initial west-center frontline was missing.");
+var economyCapture = economyTerritory.CompleteAnchorCapture("economy-anchor-center", "blue");
+Expect(economyCapture.Changed, "Economy fixture center capture did not change ownership.");
+Expect(economyCenter.OwnerId == "blue", "Economy fixture center owner did not become blue.");
+var economyAfterCaptureFrontlines = economyTerritory.GetFrontlines();
+Expect(
+    !economyAfterCaptureFrontlines.Contains(new FrontlineEdge("economy-west", "economy-center")),
+    "Economy fixture old west-center frontline remained after capture.");
+Expect(
+    economyAfterCaptureFrontlines.Contains(new FrontlineEdge("economy-center", "economy-east")),
+    "Economy fixture new center-east frontline was missing after capture.");
+Expect(
+    SectorIncomeResolver.Resolve(economyTerritory, economyProfiles, "blue") == 125,
+    "Center capture did not increase blue income from 65 to 125.");
+
+var bluePostCaptureCollection = SectorIncomeCollector.Collect(
+    economyTerritory,
+    economyProfiles,
+    blueEconomy);
+Expect(bluePostCaptureCollection.CollectedAmount == 125, "Post-capture collection amount was not 125.");
+Expect(bluePostCaptureCollection.PreviousBalance == 65, "Post-capture previous balance was not 65.");
+Expect(bluePostCaptureCollection.NewBalance == 190, "Post-capture new balance was not 190.");
+Expect(blueEconomy.Balance == 190, "Post-capture economy balance was not retained.");
+
+var overflowEconomy = new EconomyState("blue", long.MaxValue);
+ExpectThrows<OverflowException>(
+    () => SectorIncomeCollector.Collect(economyTerritory, economyProfiles, overflowEconomy),
+    "Economy balance overflow wrapped silently.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");

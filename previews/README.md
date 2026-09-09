@@ -1,17 +1,19 @@
 # Browser Playable Preview
 
-HTML 파일을 브라우저로 직접 열면 별도 설치, 로컬 서버 또는 외부 CDN 없이 현재 Source-Only 규칙의 플레이 감각을 확인할 수 있다.
+`index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
-- `RTS_CORE_01C_Territory.html`: 현재 5-Sector Territory Graph + Control Anchor Preview
-- `index.html`: DEV-WORKFLOW-R1에서 만든 3-Sector Preview 기준선
+- `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
+- `RTS_CORE_02A_Economy.html`: 현재 Sector Income + Economy Preview
+- `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## 현재 시나리오
+## 02A 현재 시나리오
 
-- 01C 시작: West/South Blue, Center/East/North Red
-- 연결: Center를 중심으로 West/East/North/South 연결
-- 시작 전선: West-Center, Center-South
-- `Anchor-C` 점령 완료 뒤 전선: Center-East, Center-North
-- `초기화`로 시작 상태 복원
+- Blue 초기 Balance 0, 다음 Collection +65
+- `수입 회수 시험` 뒤 Balance 65
+- Anchor-C 점령 뒤 Center Red→Blue, 다음 Collection +125
+- 다시 회수하면 Balance 190
+- Frontline과 Event Log도 같은 조작에서 갱신
+- Reset으로 전체 시작 상태 복원
 
 ## 책임 경계
 
