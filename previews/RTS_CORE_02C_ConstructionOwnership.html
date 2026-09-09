@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — 건설 완공과 지역 건물 소유권</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #080c09;
+      color: #f4f1e2;
+      --blue: #58b8f0;
+      --blue-fill: #173f59;
+      --red: #e2756a;
+      --red-fill: #572620;
+      --gold: #ebca5e;
+      --green: #6fe1a0;
+      --panel: rgba(17, 24, 18, 0.98);
+      --muted: #9eaa99;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(218, 196, 121, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(218, 196, 121, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 50% 8%, #2b3529 0, #111711 42%, #070a08 84%);
+      background-size: 28px 28px, 28px 28px, auto;
+    }
+
+    button { font: inherit; }
+    main { width: min(1450px, calc(100% - 28px)); margin: 20px auto; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; gap: 22px; margin-bottom: 14px; }
+    .kicker, .boundary-note { margin: 0 0 7px; color: #d8bb60; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.13em; }
+    h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.65rem); }
+    header p:not(.kicker) { max-width: 760px; margin: 8px 0 0; color: #bac3b2; line-height: 1.5; }
+    .hud { display: grid; grid-template-columns: repeat(4, minmax(112px, 1fr)); gap: 8px; min-width: min(590px, 100%); }
+    .hud-card { padding: 11px 13px; border: 1px solid #465144; border-radius: 10px; background: #101711; }
+    .hud-card span { display: block; color: #879483; font-size: 0.63rem; font-weight: 850; letter-spacing: 0.08em; }
+    .hud-card strong { display: block; margin-top: 4px; color: #f5d878; font-size: 1.18rem; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; }
+    .map-panel, .side-panel { border: 1px solid #465044; border-radius: 15px; background: var(--panel); box-shadow: 0 22px 62px rgba(0, 0, 0, 0.36); }
+    .map-panel { padding: 13px; }
+    .map-guide { display: flex; justify-content: space-between; gap: 12px; padding: 3px 3px 11px; color: #aeb8a7; font-size: 0.78rem; }
+    .map-guide strong { color: #f0d475; }
+    #battlefield { display: block; width: 100%; min-height: 620px; border: 1px solid #303a31; border-radius: 11px; background: #0b110d; cursor: pointer; }
+    .sector-area { stroke-width: 3; transition: filter 150ms ease, stroke-width 150ms ease; }
+    .sector-area.blue { fill: var(--blue-fill); stroke: var(--blue); }
+    .sector-area.red { fill: var(--red-fill); stroke: var(--red); }
+    .sector-area.selected { stroke: var(--gold); stroke-width: 8; filter: drop-shadow(0 0 10px rgba(235, 202, 94, 0.85)); }
+    .sector-name { fill: #f8f4e6; font-size: 23px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+    .sector-meta { fill: #d8dfd1; font-size: 13px; font-weight: 750; text-anchor: middle; pointer-events: none; }
+    .anchor { fill: #111812; stroke: #f3d66d; stroke-width: 4; }
+    .anchor-label { fill: #ffe792; font-size: 12px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+    .frontline { stroke: transparent; stroke-width: 10; stroke-linecap: round; pointer-events: none; }
+    .frontline.active { stroke: var(--gold); filter: drop-shadow(0 0 8px var(--gold)); }
+    .asset { cursor: pointer; }
+    .site-shape { fill: rgba(239, 194, 68, 0.18); stroke: #f0c94b; stroke-width: 5; stroke-dasharray: 11 7; }
+    .building-shape { fill: #20271f; stroke-width: 5; }
+    .building-shape.blue { stroke: var(--blue); }
+    .building-shape.red { stroke: var(--red); }
+    .asset.selected .site-shape, .asset.selected .building-shape { stroke: #fff1a7; filter: drop-shadow(0 0 11px #fff1a7); }
+    .asset-label { fill: #fff7d5; font-size: 13px; font-weight: 950; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #080c09; stroke-width: 5px; }
+    .asset-state { fill: #d9dfd1; font-size: 10px; font-weight: 800; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #080c09; stroke-width: 4px; }
+    .side-panel { display: flex; flex-direction: column; gap: 11px; padding: 16px; }
+    .panel-box { padding: 13px; border: 1px solid #394339; border-radius: 10px; background: #0b110d; }
+    .panel-box h2 { margin: 0 0 9px; color: #dce3d4; font-size: 0.92rem; }
+    .selection strong { display: block; color: #f0d370; font-size: 1.02rem; }
+    .selection span { display: block; margin-top: 5px; color: var(--muted); font-size: 0.78rem; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .action { padding: 10px; border: 1px solid #65715f; border-radius: 8px; background: #303a2c; color: #f5f2e5; cursor: pointer; font-weight: 850; }
+    .action.primary { border-color: #d3b750; background: #675725; }
+    .action.blue { border-color: #529ed0; background: #214d6b; }
+    .action.green { border-color: #61b580; background: #245638; }
+    .action.wide { grid-column: 1 / -1; }
+    .action:hover:not(:disabled) { filter: brightness(1.14); }
+    .action:disabled { cursor: not-allowed; opacity: 0.42; }
+    .detail-grid { display: grid; grid-template-columns: 90px 1fr; gap: 6px; margin: 0; font-size: 0.76rem; }
+    .detail-grid dt { color: #8f9b8a; }
+    .detail-grid dd { margin: 0; color: #e0e6da; font-weight: 750; word-break: break-all; }
+    .frontline-readout { color: #ecd174; font-size: 0.76rem; font-weight: 800; line-height: 1.5; }
+    .event-log { min-height: 150px; max-height: 230px; margin: 0; padding-left: 22px; overflow: auto; color: #aeb9a8; font-size: 0.74rem; line-height: 1.5; }
+    .event-log li + li { margin-top: 5px; }
+    .boundary-note { margin: 10px 2px 0; color: #968b62; letter-spacing: 0.04em; line-height: 1.5; }
+    footer { display: flex; justify-content: space-between; gap: 14px; margin-top: 10px; color: #7f8b7b; font-size: 0.68rem; }
+    @media (max-width: 1080px) { header { align-items: flex-start; flex-direction: column; } .hud { min-width: 0; width: 100%; } .workspace { grid-template-columns: 1fr; } }
+    @media (max-width: 650px) { .hud { grid-template-columns: 1fr 1fr; } #battlefield { min-height: 450px; } .map-guide, footer { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">RTS-CORE-02C · 완공과 시설 탈취 시험</p>
+        <h1>건설 완공과 지역 건물 소유권</h1>
+        <p>서부에 건설 현장을 배치해 명시적으로 완공하고, 중앙 지휘 거점을 점령해 중앙의 완공된 일반 건물만 청군 소유로 이전되는지 확인하세요.</p>
+      </div>
+      <div class="hud" aria-label="시험 상태">
+        <div class="hud-card"><span>청군 보유 자원</span><strong id="balance">0</strong></div>
+        <div class="hud-card"><span>다음 수입</span><strong id="income">+65</strong></div>
+        <div class="hud-card"><span>건설 현장</span><strong id="site-count">0</strong></div>
+        <div class="hud-card"><span>완공 건물</span><strong id="building-count">2</strong></div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <section class="map-panel" aria-label="지역 건물 소유권 시험 지도">
+        <div class="map-guide">
+          <span><strong>현장</strong> 점선 · <strong>완공 건물</strong> 실선</span>
+          <span>건물이나 현장을 클릭하면 상세 정보를 볼 수 있습니다</span>
+        </div>
+        <svg id="battlefield" viewBox="0 0 900 600" role="application" aria-label="5개 지역 건설 완공 시험 지도">
+          <rect class="sector-area" data-sector-area="north" x="300" y="0" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="west" x="0" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="center" x="300" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="east" x="600" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="south" x="300" y="400" width="300" height="200"></rect>
+
+          <g aria-hidden="true">
+            <text class="sector-name" x="450" y="58">북부</text><text class="sector-meta" data-sector-meta="north" x="450" y="81"></text>
+            <text class="sector-name" x="150" y="258">서부</text><text class="sector-meta" data-sector-meta="west" x="150" y="281"></text>
+            <text class="sector-name" x="450" y="258">중앙</text><text class="sector-meta" data-sector-meta="center" x="450" y="281"></text>
+            <text class="sector-name" x="750" y="258">동부</text><text class="sector-meta" data-sector-meta="east" x="750" y="281"></text>
+            <text class="sector-name" x="450" y="458">남부</text><text class="sector-meta" data-sector-meta="south" x="450" y="481"></text>
+          </g>
+
+          <line class="frontline" data-edge="west|center" x1="300" y1="210" x2="300" y2="390"></line>
+          <line class="frontline" data-edge="center|east" x1="600" y1="210" x2="600" y2="390"></line>
+          <line class="frontline" data-edge="center|north" x1="310" y1="200" x2="590" y2="200"></line>
+          <line class="frontline" data-edge="center|south" x1="310" y1="400" x2="590" y2="400"></line>
+
+          <g data-anchor="north"><circle class="anchor" cx="450" cy="125" r="16"></circle><text class="anchor-label" x="450" y="130">북</text></g>
+          <g data-anchor="west"><circle class="anchor" cx="150" cy="330" r="16"></circle><text class="anchor-label" x="150" y="335">서</text></g>
+          <g data-anchor="center"><circle class="anchor" cx="450" cy="330" r="16"></circle><text class="anchor-label" x="450" y="335">중</text></g>
+          <g data-anchor="east"><circle class="anchor" cx="750" cy="330" r="16"></circle><text class="anchor-label" x="750" y="335">동</text></g>
+          <g data-anchor="south"><circle class="anchor" cx="450" cy="530" r="16"></circle><text class="anchor-label" x="450" y="535">남</text></g>
+
+          <g id="assets-layer" aria-label="건설 현장과 완공 건물"></g>
+        </svg>
+        <p class="boundary-note">범위 경계: 병영·보급창 같은 완공된 일반 건물만 지역 점령 시 이전합니다. 방어시설과 미완공 현장의 처리 규칙은 아직 정하지 않았습니다.</p>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-box selection" aria-live="polite">
+          <h2>선택한 지역</h2>
+          <strong id="selected-sector">지역을 선택하세요</strong>
+          <span id="selected-sector-owner">지도의 지역이나 지휘 거점을 클릭하세요.</span>
+        </section>
+
+        <section class="actions" aria-label="시험 조작 버튼">
+          <button class="action blue" id="collect-income" type="button">수입 회수</button>
+          <button class="action" id="place-site" type="button" disabled>서부에 병영 현장 배치</button>
+          <button class="action green" id="complete-site" type="button" disabled>선택 현장 완공</button>
+          <button class="action primary" id="capture-sector" type="button" disabled>선택 지역 점령</button>
+          <button class="action wide" id="reset-preview" type="button">전체 초기화</button>
+        </section>
+
+        <section class="panel-box">
+          <h2>선택한 시설 상세</h2>
+          <dl class="detail-grid" id="asset-detail"><dt>안내</dt><dd>건설 현장이나 완공 건물을 선택하세요.</dd></dl>
+        </section>
+
+        <section class="panel-box">
+          <h2>현재 전선</h2>
+          <div class="frontline-readout" id="frontline-readout"></div>
+        </section>
+
+        <section class="panel-box">
+          <h2>진행 기록</h2>
+          <ol class="event-log" id="event-log" aria-live="polite"></ol>
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <span>완공은 버튼으로만 실행 · 자동 시간 흐름 없음</span>
+      <span>한글 사용자 화면 · Unity 실행 화면과 기술 정본이 아님</span>
+    </footer>
+  </main>
+
+  <script>
+    const sectors = Object.freeze({
+      west:   { name: "서부", income: 40, initialOwner: "Blue", bounds: [0, 300, 200, 400] },
+      center: { name: "중앙", income: 60, initialOwner: "Red", bounds: [300, 600, 200, 400] },
+      east:   { name: "동부", income: 50, initialOwner: "Red", bounds: [600, 900, 200, 400] },
+      north:  { name: "북부", income: 35, initialOwner: "Red", bounds: [300, 600, 0, 200] },
+      south:  { name: "남부", income: 25, initialOwner: "Blue", bounds: [300, 600, 400, 600] }
+    });
+    const topology = Object.freeze([
+      ["west", "center"], ["center", "east"], ["center", "north"], ["center", "south"]
+    ]);
+    const state = {
+      owners: {}, balance: 0, sites: [], buildings: [], selectedSectorId: null,
+      selectedAsset: null, events: []
+    };
+
+    function factionName(id) { return id === "Blue" ? "청군" : id === "Red" ? "적군" : id; }
+    function buildingTypeName(id) { return id === "barracks" ? "병영" : id === "depot" ? "보급창" : id; }
+    function edgeKey(first, second) { return [first, second].sort().join("|"); }
+    function edgeLabel([first, second]) { return `${sectors[first].name}–${sectors[second].name}`; }
+
+    function resetState() {
+      state.owners = Object.fromEntries(Object.entries(sectors).map(([id, sector]) => [id, sector.initialOwner]));
+      state.balance = 0;
+      state.sites = [];
+      state.buildings = [
+        { buildingId: "building-center-depot", buildingTypeId: "depot", ownerId: "Red", sectorId: "center", x: 500, y: 330, radius: 14 },
+        { buildingId: "building-east-barracks", buildingTypeId: "barracks", ownerId: "Red", sectorId: "east", x: 750, y: 330, radius: 18 }
+      ];
+      state.selectedSectorId = null;
+      state.selectedAsset = null;
+      state.events = ["시험 상태 초기화: 중앙 보급창과 동부 병영은 적군의 완공 건물입니다"];
+      render();
+    }
+
+    function calculateIncome() {
+      return Object.entries(sectors).reduce(
+        (sum, [id, sector]) => sum + (state.owners[id] === "Blue" ? sector.income : 0), 0);
+    }
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => state.owners[first] !== state.owners[second]);
+    }
+
+    function resolveSector(x, y) {
+      for (const [id, sector] of Object.entries(sectors)) {
+        const [minX, maxX, minY, maxY] = sector.bounds;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) return id;
+      }
+      return null;
+    }
+
+    function selectSector(sectorId) {
+      if (!sectors[sectorId]) throw new Error(`알 수 없는 지역: ${sectorId}`);
+      state.selectedSectorId = sectorId;
+      state.selectedAsset = null;
+      state.events.unshift(`${sectors[sectorId].name} 선택 · 소유: ${factionName(state.owners[sectorId])}`);
+      render();
+      return { sectorId, ownerId: state.owners[sectorId] };
+    }
+
+    function selectAsset(kind, id) {
+      const collection = kind === "site" ? state.sites : state.buildings;
+      if (!collection.some(asset => (kind === "site" ? asset.siteId : asset.buildingId) === id)) return false;
+      state.selectedAsset = { kind, id };
+      const asset = collection.find(item => (kind === "site" ? item.siteId : item.buildingId) === id);
+      state.selectedSectorId = asset.sectorId;
+      render();
+      return true;
+    }
+
+    function collectIncome() {
+      const amount = calculateIncome();
+      const previous = state.balance;
+      state.balance += amount;
+      state.events.unshift(`청군 수입 +${amount} 회수: ${previous} → ${state.balance}`);
+      render();
+      return amount;
+    }
+
+    function placeWestBarracksSite() {
+      if (state.selectedSectorId !== "west" || state.owners.west !== "Blue") return { success: false, reason: "청군 소유 서부를 먼저 선택하세요" };
+      if (state.sites.some(site => site.siteId === "site-west-01") || state.buildings.some(building => building.buildingId === "building-west-01")) {
+        return { success: false, reason: "서부 시험 위치가 이미 사용 중입니다" };
+      }
+      if (state.balance < 50) return { success: false, reason: "자원이 부족합니다" };
+      state.balance -= 50;
+      const site = { siteId: "site-west-01", buildingTypeId: "barracks", ownerId: "Blue", sectorId: "west", x: 115, y: 330, radius: 18 };
+      state.sites.push(site);
+      state.selectedAsset = { kind: "site", id: site.siteId };
+      state.events.unshift("서부 자유 위치에 병영 건설 현장 배치: 자원 50 사용");
+      render();
+      return { success: true, site: { ...site } };
+    }
+
+    function completeSelectedSite() {
+      if (!state.selectedAsset || state.selectedAsset.kind !== "site") return { success: false, reason: "완공할 건설 현장을 선택하세요" };
+      const index = state.sites.findIndex(site => site.siteId === state.selectedAsset.id);
+      if (index < 0) return { success: false, reason: "선택한 건설 현장을 찾을 수 없습니다" };
+      const site = state.sites[index];
+      const buildingId = site.siteId === "site-west-01" ? "building-west-01" : `building-${site.siteId}`;
+      if (state.buildings.some(building => building.buildingId === buildingId)) return { success: false, reason: "완공 건물 번호가 중복됩니다" };
+      const building = {
+        buildingId,
+        buildingTypeId: site.buildingTypeId,
+        ownerId: site.ownerId,
+        sectorId: site.sectorId,
+        x: site.x,
+        y: site.y,
+        radius: site.radius
+      };
+      state.buildings.push(building);
+      state.sites.splice(index, 1);
+      state.selectedAsset = { kind: "building", id: buildingId };
+      state.events.unshift(`병영 현장 완공: 소유 ${factionName(building.ownerId)} · 지역 ${sectors[building.sectorId].name} 유지`);
+      render();
+      return { success: true, building: { ...building } };
+    }
+
+    function captureSelectedSector() {
+      const sectorId = state.selectedSectorId;
+      if (!sectorId || state.owners[sectorId] === "Blue") return { changed: false, transferredBuildingIds: [] };
+      const previousOwner = state.owners[sectorId];
+      const previousIncome = calculateIncome();
+      state.owners[sectorId] = "Blue";
+      const transferredBuildingIds = [];
+      for (const building of state.buildings) {
+        if (building.sectorId === sectorId && building.ownerId !== "Blue") {
+          building.ownerId = "Blue";
+          transferredBuildingIds.push(building.buildingId);
+          state.events.unshift(`${sectors[sectorId].name}의 ${buildingTypeName(building.buildingTypeId)} 소유권 이전: ${factionName(previousOwner)} → 청군`);
+          state.events.unshift(`${buildingTypeName(building.buildingTypeId)}의 소속 지역은 ${sectors[building.sectorId].name}로 유지`);
+        }
+      }
+      state.events.unshift(`${sectors[sectorId].name} 점령: ${factionName(previousOwner)} → 청군`);
+      state.events.unshift(`청군 다음 수입: +${previousIncome} → +${calculateIncome()}`);
+      if (sectorId === "center") state.events.unshift("동부의 완공 병영은 적군 소유로 유지");
+      render();
+      return { changed: true, sectorId, transferredBuildingIds };
+    }
+
+    function selectedAssetValue() {
+      if (!state.selectedAsset) return null;
+      const collection = state.selectedAsset.kind === "site" ? state.sites : state.buildings;
+      return collection.find(asset => (state.selectedAsset.kind === "site" ? asset.siteId : asset.buildingId) === state.selectedAsset.id) || null;
+    }
+
+    function render() {
+      if (typeof document === "undefined") return;
+      for (const [sectorId, sector] of Object.entries(sectors)) {
+        const area = document.querySelector(`[data-sector-area="${sectorId}"]`);
+        area.setAttribute("class", `sector-area ${state.owners[sectorId].toLowerCase()}${state.selectedSectorId === sectorId ? " selected" : ""}`);
+        document.querySelector(`[data-sector-meta="${sectorId}"]`).textContent = `소유 ${factionName(state.owners[sectorId])} · 수입 ${sector.income}`;
+      }
+      const frontlines = deriveFrontlines();
+      const keys = new Set(frontlines.map(edge => edgeKey(...edge)));
+      document.querySelectorAll("[data-edge]").forEach(line => {
+        line.setAttribute("class", `frontline${keys.has(edgeKey(...line.dataset.edge.split("|"))) ? " active" : ""}`);
+      });
+
+      document.getElementById("balance").textContent = state.balance;
+      document.getElementById("income").textContent = `+${calculateIncome()}`;
+      document.getElementById("site-count").textContent = state.sites.length;
+      document.getElementById("building-count").textContent = state.buildings.length;
+      document.getElementById("frontline-readout").textContent = frontlines.map(edgeLabel).join(" · ") || "현재 전선 없음";
+
+      const sectorTitle = document.getElementById("selected-sector");
+      const sectorOwner = document.getElementById("selected-sector-owner");
+      if (state.selectedSectorId) {
+        sectorTitle.textContent = sectors[state.selectedSectorId].name;
+        sectorOwner.textContent = `소유: ${factionName(state.owners[state.selectedSectorId])} · 수입 ${sectors[state.selectedSectorId].income}`;
+      } else {
+        sectorTitle.textContent = "지역을 선택하세요";
+        sectorOwner.textContent = "지도의 지역이나 지휘 거점을 클릭하세요.";
+      }
+
+      document.getElementById("place-site").disabled = state.selectedSectorId !== "west" || state.owners.west !== "Blue" || state.balance < 50 || state.sites.length > 0 || state.buildings.some(building => building.buildingId === "building-west-01");
+      document.getElementById("complete-site").disabled = !state.selectedAsset || state.selectedAsset.kind !== "site";
+      document.getElementById("capture-sector").disabled = !state.selectedSectorId || state.owners[state.selectedSectorId] === "Blue";
+
+      const selected = selectedAssetValue();
+      const detail = document.getElementById("asset-detail");
+      if (!selected || !state.selectedAsset) {
+        detail.innerHTML = "<dt>안내</dt><dd>건설 현장이나 완공 건물을 선택하세요.</dd>";
+      } else {
+        const isSite = state.selectedAsset.kind === "site";
+        detail.innerHTML = `<dt>번호</dt><dd>${isSite ? selected.siteId : selected.buildingId}</dd><dt>종류</dt><dd>${buildingTypeName(selected.buildingTypeId)}</dd><dt>상태</dt><dd>${isSite ? "건설 현장" : "완공"}</dd><dt>소유</dt><dd>${factionName(selected.ownerId)}</dd><dt>소속 지역</dt><dd>${sectors[selected.sectorId].name}</dd><dt>위치</dt><dd>(${selected.x}, ${selected.y})</dd>`;
+      }
+
+      const assets = [
+        ...state.sites.map(site => ({ ...site, kind: "site", id: site.siteId })),
+        ...state.buildings.map(building => ({ ...building, kind: "building", id: building.buildingId }))
+      ];
+      document.getElementById("assets-layer").innerHTML = assets.map(asset => {
+        const selectedClass = state.selectedAsset && state.selectedAsset.kind === asset.kind && state.selectedAsset.id === asset.id ? " selected" : "";
+        const typeLabel = buildingTypeName(asset.buildingTypeId);
+        if (asset.kind === "site") {
+          return `<g class="asset${selectedClass}" data-asset-kind="site" data-asset-id="${asset.id}"><circle class="site-shape" cx="${asset.x}" cy="${asset.y}" r="54"></circle><text class="asset-label" x="${asset.x}" y="${asset.y}">${typeLabel}</text><text class="asset-state" x="${asset.x}" y="${asset.y + 18}">건설 현장</text></g>`;
+        }
+        return `<g class="asset${selectedClass}" data-asset-kind="building" data-asset-id="${asset.id}"><rect class="building-shape ${asset.ownerId.toLowerCase()}" x="${asset.x - 42}" y="${asset.y - 30}" width="84" height="60" rx="8"></rect><text class="asset-label" x="${asset.x}" y="${asset.y}">${typeLabel}</text><text class="asset-state" x="${asset.x}" y="${asset.y + 18}">완공 · ${factionName(asset.ownerId)}</text></g>`;
+      }).join("");
+      document.getElementById("event-log").innerHTML = state.events.map(event => `<li>${event}</li>`).join("");
+    }
+
+    function snapshot() {
+      return {
+        owners: { ...state.owners }, balance: state.balance, income: calculateIncome(),
+        sites: state.sites.map(site => ({ ...site })),
+        buildings: state.buildings.map(building => ({ ...building })),
+        selectedSectorId: state.selectedSectorId,
+        selectedAsset: state.selectedAsset ? { ...state.selectedAsset } : null,
+        frontlines: deriveFrontlines().map(edgeLabel), events: [...state.events]
+      };
+    }
+
+    if (typeof window !== "undefined") {
+      window.__constructionOwnershipPreview = {
+        resetState, selectSector, selectAsset, collectIncome, placeWestBarracksSite,
+        completeSelectedSite, captureSelectedSector, snapshot
+      };
+    }
+
+    if (typeof document !== "undefined") {
+      const battlefield = document.getElementById("battlefield");
+      battlefield.addEventListener("click", event => {
+        const asset = event.target.closest("[data-asset-kind]");
+        if (asset) {
+          selectAsset(asset.dataset.assetKind, asset.dataset.assetId);
+          return;
+        }
+        const anchor = event.target.closest("[data-anchor]");
+        if (anchor) {
+          selectSector(anchor.dataset.anchor);
+          return;
+        }
+        const bounds = battlefield.getBoundingClientRect();
+        const x = (event.clientX - bounds.left) * 900 / bounds.width;
+        const y = (event.clientY - bounds.top) * 600 / bounds.height;
+        const sectorId = resolveSector(x, y);
+        if (sectorId) selectSector(sectorId);
+      });
+      document.getElementById("collect-income").addEventListener("click", collectIncome);
+      document.getElementById("place-site").addEventListener("click", placeWestBarracksSite);
+      document.getElementById("complete-site").addEventListener("click", completeSelectedSite);
+      document.getElementById("capture-sector").addEventListener("click", captureSelectedSector);
+      document.getElementById("reset-preview").addEventListener("click", resetState);
+    }
+    resetState();
+  </script>
+</body>
+</html>

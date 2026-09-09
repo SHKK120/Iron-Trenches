@@ -46,6 +46,23 @@ void ExpectPlacementFailure(
     Expect(sites.Count == expectedSiteCount, $"{context}: construction site collection changed.");
 }
 
+void ExpectCompletionFailure(
+    ConstructionCompletionResult result,
+    ConstructionCompletionFailureReason expectedReason,
+    ICollection<ConstructionSite> sites,
+    int expectedSiteCount,
+    ICollection<BuildingState> buildings,
+    int expectedBuildingCount,
+    string context)
+{
+    Expect(!result.Success, $"{context}: completion unexpectedly succeeded.");
+    Expect(result.FailureReason == expectedReason, $"{context}: failure reason was incorrect.");
+    Expect(result.CompletedSiteId == null, $"{context}: failed completion returned a site id.");
+    Expect(result.Building == null, $"{context}: failed completion returned a building.");
+    Expect(sites.Count == expectedSiteCount, $"{context}: site collection changed.");
+    Expect(buildings.Count == expectedBuildingCount, $"{context}: building collection changed.");
+}
+
 var destination = new WorldPoint(12.5f, -4f);
 var move = new CommandOrder("squad-alpha", SquadCommandType.Move, destination);
 
@@ -855,6 +872,362 @@ var zeroCostPlacement = BuildingPlacementService.Place(
 Expect(zeroCostPlacement.Success, "Valid zero-cost placement failed.");
 Expect(zeroCostEconomy.Balance == 0, "Zero-cost placement changed balance.");
 Expect(zeroCostSites.Count == 1, "Zero-cost placement did not create a site.");
+
+var directBuildingPosition = new WorldPoint(31.7f, 15.2f);
+var directBuilding = new BuildingState(
+    "building-direct",
+    "barracks",
+    "blue",
+    "construction-west",
+    directBuildingPosition,
+    18f);
+Expect(directBuilding.BuildingId == "building-direct", "Building id was not retained.");
+Expect(directBuilding.BuildingTypeId == "barracks", "Building type was not retained.");
+Expect(directBuilding.OwnerId == "blue", "Building owner was not retained.");
+Expect(directBuilding.SectorId == "construction-west", "Building sector was not retained.");
+Expect(
+    directBuilding.Position.X == 31.7f && directBuilding.Position.Z == 15.2f,
+    "Building position was not retained.");
+Expect(directBuilding.FootprintRadius == 18f, "Building footprint was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingState("", "barracks", "blue", "construction-west", directBuildingPosition, 18f),
+    "Blank building id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingState("building", "", "blue", "construction-west", directBuildingPosition, 18f),
+    "Blank completed building type was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingState("building", "barracks", "", "construction-west", directBuildingPosition, 18f),
+    "Blank completed building owner was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingState("building", "barracks", "blue", "", directBuildingPosition, 18f),
+    "Blank completed building sector was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingState(
+        "building",
+        "barracks",
+        "blue",
+        "construction-west",
+        new WorldPoint(float.PositiveInfinity, 0f),
+        18f),
+    "Non-finite completed building position was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingState("building", "barracks", "blue", "construction-west", directBuildingPosition, 0f),
+    "Zero completed building footprint was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingState(
+        "building",
+        "barracks",
+        "blue",
+        "construction-west",
+        directBuildingPosition,
+        float.NaN),
+    "NaN completed building footprint was accepted.");
+
+var directBuildingSectorBeforeTransfer = directBuilding.SectorId;
+directBuilding.TransferOwnershipTo("red");
+Expect(directBuilding.OwnerId == "red", "Building ownership did not transfer.");
+Expect(directBuilding.SectorId == directBuildingSectorBeforeTransfer, "Building sector changed during ownership transfer.");
+ExpectThrows<ArgumentException>(
+    () => directBuilding.TransferOwnershipTo(" "),
+    "Blank building transfer owner was accepted.");
+Expect(directBuilding.OwnerId == "red", "Rejected building transfer changed owner.");
+
+var completionSite = firstPlacement.ConstructionSite!;
+var completionSites = new List<ConstructionSite> { completionSite };
+var completionBuildings = new List<BuildingState>
+{
+    new BuildingState(
+        "building-existing",
+        "depot",
+        "red",
+        "construction-east",
+        new WorldPoint(250f, 50f),
+        14f)
+};
+
+var unknownCompletion = ConstructionCompletionService.Complete(
+    "site-missing",
+    "building-missing-site",
+    completionSites,
+    completionBuildings);
+ExpectCompletionFailure(
+    unknownCompletion,
+    ConstructionCompletionFailureReason.UnknownSite,
+    completionSites,
+    1,
+    completionBuildings,
+    1,
+    "Unknown construction site");
+
+var invalidSiteCompletion = ConstructionCompletionService.Complete(
+    " ",
+    "building-invalid-site",
+    completionSites,
+    completionBuildings);
+ExpectCompletionFailure(
+    invalidSiteCompletion,
+    ConstructionCompletionFailureReason.InvalidSiteId,
+    completionSites,
+    1,
+    completionBuildings,
+    1,
+    "Invalid construction site id");
+
+var invalidBuildingCompletion = ConstructionCompletionService.Complete(
+    completionSite.SiteId,
+    " ",
+    completionSites,
+    completionBuildings);
+ExpectCompletionFailure(
+    invalidBuildingCompletion,
+    ConstructionCompletionFailureReason.InvalidBuildingId,
+    completionSites,
+    1,
+    completionBuildings,
+    1,
+    "Invalid completed building id");
+
+var duplicateBuildingCompletion = ConstructionCompletionService.Complete(
+    completionSite.SiteId,
+    "building-existing",
+    completionSites,
+    completionBuildings);
+ExpectCompletionFailure(
+    duplicateBuildingCompletion,
+    ConstructionCompletionFailureReason.DuplicateBuildingId,
+    completionSites,
+    1,
+    completionBuildings,
+    1,
+    "Duplicate completed building id");
+
+var successfulCompletion = ConstructionCompletionService.Complete(
+    completionSite.SiteId,
+    "building-west-01",
+    completionSites,
+    completionBuildings);
+Expect(successfulCompletion.Success, "Valid construction completion failed.");
+Expect(
+    successfulCompletion.FailureReason == ConstructionCompletionFailureReason.None,
+    "Successful completion reported a failure.");
+Expect(successfulCompletion.CompletedSiteId == completionSite.SiteId, "Completion lost the completed site id.");
+Expect(successfulCompletion.Building != null, "Completion did not return a building.");
+Expect(completionSites.Count == 0, "Successful completion did not remove the site.");
+Expect(completionBuildings.Count == 2, "Successful completion did not add exactly one building.");
+var completedWestBuilding = successfulCompletion.Building!;
+Expect(completedWestBuilding.BuildingId == "building-west-01", "Completion did not use the requested building id.");
+Expect(completedWestBuilding.BuildingTypeId == completionSite.BuildingTypeId, "Completion changed building type.");
+Expect(completedWestBuilding.OwnerId == completionSite.OwnerId, "Completion changed owner.");
+Expect(completedWestBuilding.SectorId == completionSite.SectorId, "Completion changed SectorId.");
+Expect(
+    completedWestBuilding.Position.X == completionSite.Position.X
+        && completedWestBuilding.Position.Z == completionSite.Position.Z,
+    "Completion changed position.");
+Expect(
+    completedWestBuilding.FootprintRadius == completionSite.FootprintRadius,
+    "Completion changed footprint.");
+Expect(
+    completedWestBuilding.BuildingId != completionSite.SiteId,
+    "Completion forced BuildingId to equal SiteId.");
+
+var duplicateCollectionSite = new ConstructionSite(
+    "duplicate-completion-site",
+    "depot",
+    "blue",
+    "construction-west",
+    new WorldPoint(68.4f, 55.9f),
+    14f);
+var duplicateCollectionSites = new List<ConstructionSite> { duplicateCollectionSite };
+var invalidCompletedCollection = new List<BuildingState>
+{
+    new BuildingState("duplicate-building", "depot", "blue", "construction-west", new WorldPoint(20f, 20f), 5f),
+    new BuildingState("duplicate-building", "depot", "blue", "construction-west", new WorldPoint(30f, 30f), 5f)
+};
+ExpectThrows<ArgumentException>(
+    () => ConstructionCompletionService.Complete(
+        duplicateCollectionSite.SiteId,
+        "new-building",
+        duplicateCollectionSites,
+        invalidCompletedCollection),
+    "Duplicate ids in completed building collection were accepted.");
+Expect(duplicateCollectionSites.Count == 1, "Invalid building collection removed a construction site.");
+Expect(invalidCompletedCollection.Count == 2, "Invalid building collection was mutated.");
+
+var transferTopology = new SectorTopology();
+foreach (var sectorId in new[]
+{
+    "transfer-west",
+    "transfer-center",
+    "transfer-east",
+    "transfer-north",
+    "transfer-south"
+})
+{
+    transferTopology.RegisterSector(sectorId);
+}
+
+transferTopology.AddBidirectionalAdjacency("transfer-west", "transfer-center");
+transferTopology.AddBidirectionalAdjacency("transfer-center", "transfer-east");
+transferTopology.AddBidirectionalAdjacency("transfer-center", "transfer-north");
+transferTopology.AddBidirectionalAdjacency("transfer-center", "transfer-south");
+
+var transferCenterSector = new SectorState("transfer-center", "red");
+var transferEastSector = new SectorState("transfer-east", "red");
+var transferTerritory = new TerritoryGraph(
+    transferTopology,
+    new[]
+    {
+        new SectorState("transfer-west", "blue"),
+        transferCenterSector,
+        transferEastSector,
+        new SectorState("transfer-north", "red"),
+        new SectorState("transfer-south", "blue")
+    },
+    new[]
+    {
+        new SectorControlAnchor("transfer-anchor-west", "transfer-west"),
+        new SectorControlAnchor("transfer-anchor-center", "transfer-center"),
+        new SectorControlAnchor("transfer-anchor-east", "transfer-east"),
+        new SectorControlAnchor("transfer-anchor-north", "transfer-north"),
+        new SectorControlAnchor("transfer-anchor-south", "transfer-south")
+    });
+var transferProfiles = new[]
+{
+    new SectorIncomeProfile("transfer-west", 40),
+    new SectorIncomeProfile("transfer-center", 60),
+    new SectorIncomeProfile("transfer-east", 50),
+    new SectorIncomeProfile("transfer-north", 35),
+    new SectorIncomeProfile("transfer-south", 25)
+};
+var centerBarracks = new BuildingState(
+    "transfer-center-barracks",
+    "barracks",
+    "red",
+    "transfer-center",
+    new WorldPoint(130f, 40f),
+    18f);
+var centerDepot = new BuildingState(
+    "transfer-center-depot",
+    "depot",
+    "red",
+    "transfer-center",
+    new WorldPoint(170f, 70f),
+    14f);
+var centerAlreadyBlue = new BuildingState(
+    "transfer-center-blue",
+    "depot",
+    "blue",
+    "transfer-center",
+    new WorldPoint(150f, 20f),
+    10f);
+var eastBarracks = new BuildingState(
+    "transfer-east-barracks",
+    "barracks",
+    "red",
+    "transfer-east",
+    new WorldPoint(250f, 50f),
+    18f);
+var westBarracks = new BuildingState(
+    "transfer-west-barracks",
+    "barracks",
+    "blue",
+    "transfer-west",
+    new WorldPoint(50f, 50f),
+    18f);
+var transferBuildings = new List<BuildingState>
+{
+    centerBarracks,
+    centerDepot,
+    centerAlreadyBlue,
+    eastBarracks,
+    westBarracks
+};
+
+Expect(
+    SectorIncomeResolver.Resolve(transferTerritory, transferProfiles, "blue") == 65,
+    "Transfer fixture initial Blue income was not 65.");
+var transferFrontlinesBefore = transferTerritory.GetFrontlines();
+Expect(
+    transferFrontlinesBefore.Contains(new FrontlineEdge("transfer-west", "transfer-center")),
+    "Transfer fixture initial West-Center frontline was missing.");
+
+var duplicateTransferInputs = new[]
+{
+    new BuildingState("transfer-duplicate", "depot", "red", "transfer-east", new WorldPoint(220f, 30f), 5f),
+    new BuildingState("transfer-duplicate", "depot", "red", "transfer-east", new WorldPoint(230f, 40f), 5f)
+};
+ExpectThrows<ArgumentException>(
+    () => TerritoryBuildingOwnershipService.CaptureAndTransfer(
+        transferTerritory,
+        "transfer-anchor-east",
+        "blue",
+        duplicateTransferInputs),
+    "Duplicate transfer building ids were accepted.");
+Expect(transferEastSector.OwnerId == "red", "Invalid transfer collection partially captured East.");
+
+var centerTransfer = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    transferTerritory,
+    "transfer-anchor-center",
+    "blue",
+    transferBuildings);
+Expect(centerTransfer.CaptureChanged, "Center building transfer did not report a capture change.");
+Expect(centerTransfer.SectorId == "transfer-center", "Transfer result lost the captured SectorId.");
+Expect(centerTransfer.PreviousOwnerId == "red", "Transfer result lost previous sector owner.");
+Expect(centerTransfer.NewOwnerId == "blue", "Transfer result lost new sector owner.");
+Expect(centerTransfer.TransferredBuildingCount == 2, "Transfer count did not include exactly changed buildings.");
+Expect(
+    centerTransfer.TransferredBuildingIds.Contains("transfer-center-barracks"),
+    "Center Barracks was not listed as transferred.");
+Expect(
+    centerTransfer.TransferredBuildingIds.Contains("transfer-center-depot"),
+    "Center Depot was not listed as transferred.");
+Expect(
+    !centerTransfer.TransferredBuildingIds.Contains("transfer-center-blue"),
+    "Already-Blue Center building was incorrectly counted as transferred.");
+Expect(transferCenterSector.OwnerId == "blue", "Center Sector owner did not become Blue.");
+Expect(centerBarracks.OwnerId == "blue", "Center Barracks owner did not become Blue.");
+Expect(centerDepot.OwnerId == "blue", "Center Depot owner did not become Blue.");
+Expect(centerAlreadyBlue.OwnerId == "blue", "Already-Blue Center building changed incorrectly.");
+Expect(eastBarracks.OwnerId == "red", "East building changed during Center capture.");
+Expect(westBarracks.OwnerId == "blue", "West building changed during Center capture.");
+Expect(centerBarracks.SectorId == "transfer-center", "Center Barracks SectorId changed.");
+Expect(centerDepot.SectorId == "transfer-center", "Center Depot SectorId changed.");
+Expect(eastBarracks.SectorId == "transfer-east", "East Barracks SectorId changed.");
+var transferFrontlinesAfter = transferTerritory.GetFrontlines();
+Expect(
+    !transferFrontlinesAfter.Contains(new FrontlineEdge("transfer-west", "transfer-center")),
+    "Old West-Center frontline remained after transfer capture.");
+Expect(
+    transferFrontlinesAfter.Contains(new FrontlineEdge("transfer-center", "transfer-east")),
+    "New Center-East frontline was missing after transfer capture.");
+Expect(
+    transferFrontlinesAfter.Contains(new FrontlineEdge("transfer-center", "transfer-north")),
+    "New Center-North frontline was missing after transfer capture.");
+Expect(
+    SectorIncomeResolver.Resolve(transferTerritory, transferProfiles, "blue") == 125,
+    "Center transfer capture did not increase Blue income to 125.");
+
+var lateMismatchedCenterBuilding = new BuildingState(
+    "transfer-center-late-red",
+    "depot",
+    "red",
+    "transfer-center",
+    new WorldPoint(145f, 85f),
+    8f);
+transferBuildings.Add(lateMismatchedCenterBuilding);
+var sameOwnerTransfer = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    transferTerritory,
+    "transfer-anchor-center",
+    "blue",
+    transferBuildings);
+Expect(!sameOwnerTransfer.CaptureChanged, "Same-owner capture reported a building transfer capture change.");
+Expect(sameOwnerTransfer.TransferredBuildingCount == 0, "Same-owner capture transferred buildings.");
+Expect(
+    lateMismatchedCenterBuilding.OwnerId == "red",
+    "Same-owner capture repaired mismatched building ownership without a capture change.");
+Expect(
+    lateMismatchedCenterBuilding.SectorId == "transfer-center",
+    "Same-owner capture changed mismatched building SectorId.");
 
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 

@@ -3,17 +3,18 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_CORE_02B_FreeConstruction.html`: 현재 Sector-Scoped Free Construction Preview
+- `RTS_CORE_02C_ConstructionOwnership.html`: 현재 건설 완공 + 일반 건물 지역 소유권 Preview
+- `RTS_CORE_02B_FreeConstruction.html`: 완료된 Sector-Scoped Free Construction Preview
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## 02B 현재 시나리오
+## 02C 현재 시나리오
 
-- Sector를 먼저 선택하고 Barracks/Depot를 선택한 뒤 해당 Sector 안의 자유 위치에 Ghost를 이동
-- Green Ghost는 배치 가능, 다른 Sector·경계 침범·충돌·자금 부족은 Red와 이유로 표시
-- Blue 초기 수입 +65를 회수하고 West 자유 위치에 Barracks Site를 배치하면 Balance 65→15
-- Center는 Red일 때 건설 불가이며 Anchor 점령 뒤 새 Blue 건설 영역과 다음 수입 +125로 전환
-- 각 Construction Site에서 Type, Owner와 정확히 하나의 Sector 소속을 확인
+- 중앙에는 적군의 완공 보급창, 동부에는 적군의 완공 병영이 초기 배치됨
+- 청군 수입 +65를 회수하고 서부 자유 위치에 병영 건설 현장을 배치
+- 선택한 현장을 명시적 버튼으로 완공하고 Owner/Sector/Position이 유지되는지 확인
+- 중앙 점령 시 중앙 보급창만 청군으로 이전되고 소속 지역은 중앙로 유지
+- 동부 병영은 중앙 점령의 영향을 받지 않고 적군 소유 유지
 - Reset으로 전체 시작 상태 복원
 
 ## 책임 경계
