@@ -5,7 +5,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $expectedRemote = 'https://github.com/SHKK120/Iron-Trenches.git'
+$expectedUnityVersion = '6000.6.0f1'
+$gitGuiPath = 'C:\Program Files\Git\cmd\git-gui.exe'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$expectedWorkspaceRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Iron-Trenches'
 $script:hasFailure = $false
 $script:hasBlocked = $false
 
@@ -27,6 +30,15 @@ function Write-CheckResult {
     }
 
     Write-Host "[$State] $Name — $Detail"
+}
+
+$resolvedRepoRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\')
+$resolvedExpectedRoot = [System.IO.Path]::GetFullPath($expectedWorkspaceRoot).TrimEnd('\')
+if ($resolvedRepoRoot -eq $resolvedExpectedRoot) {
+    Write-CheckResult 'PASS' 'Workspace root' $resolvedRepoRoot
+}
+else {
+    Write-CheckResult 'FAIL' 'Workspace root' "expected $resolvedExpectedRoot, found $resolvedRepoRoot; do not work from a ZIP folder"
 }
 
 function Invoke-GitInspection {
@@ -76,7 +88,7 @@ else {
 $dashboardPath = Join-Path $repoRoot 'docs/40_구현순서.md'
 if (Test-Path -LiteralPath $dashboardPath) {
     $dashboard = Get-Content -Raw -LiteralPath $dashboardPath
-    if ($dashboard -match '## 다음 Result Bundle' -and $dashboard -match 'DEV-BOOT-01') {
+    if ($dashboard -match '## 다음 구현 Bundle' -and $dashboard -match 'DEV-BOOT-01') {
         Write-CheckResult 'PASS' 'Next Result Bundle' 'DEV-BOOT-01 found in docs/40_구현순서.md'
     }
     else {
@@ -90,6 +102,12 @@ else {
 $gitDirectory = Join-Path $repoRoot '.git'
 if (-not (Test-Path -LiteralPath $gitDirectory)) {
     Write-CheckResult 'FAIL' 'Git working copy' '.git not found; treat this folder as a ZIP/imported safety copy'
+    if (Test-Path -LiteralPath $gitGuiPath) {
+        Write-CheckResult 'PASS' 'Git GUI fallback' $gitGuiPath
+    }
+    else {
+        Write-CheckResult 'BLOCKED' 'Git GUI fallback' 'approved Git GUI not found'
+    }
     Write-CheckResult 'SKIP' 'Repository identity' 'requires a normal Clone or approved remote workspace'
     Write-CheckResult 'SKIP' 'Remote checkpoint' 'requires a normal Clone or approved remote workspace'
 }
@@ -153,18 +171,111 @@ else {
         }
         catch {
             Write-CheckResult 'BLOCKED' 'Git CLI' 'execution blocked or unavailable; do not retry or bypass managed-PC policy'
+            if (Test-Path -LiteralPath $gitGuiPath) {
+                Write-CheckResult 'PASS' 'Git GUI fallback' $gitGuiPath
+            }
+            else {
+                Write-CheckResult 'BLOCKED' 'Git GUI fallback' 'approved Git GUI not found'
+            }
         }
     }
+}
+
+$unityHubPath = 'C:\Program Files\Unity Hub\Unity Hub.exe'
+$unityHubVersionPath = 'C:\Program Files\Unity Hub\version'
+if (Test-Path -LiteralPath $unityHubPath) {
+    $hubVersion = if (Test-Path -LiteralPath $unityHubVersionPath) {
+        (Get-Content -Raw -LiteralPath $unityHubVersionPath).Trim()
+    }
+    else {
+        'version file missing'
+    }
+    Write-CheckResult 'PASS' 'Unity Hub' "$hubVersion — $unityHubPath"
+}
+else {
+    Write-CheckResult 'FAIL' 'Unity Hub' 'not found at the verified install path'
+}
+
+$unityEditorPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Unity.exe"
+if (Test-Path -LiteralPath $unityEditorPath) {
+    Write-CheckResult 'PASS' 'Unity Editor' "$expectedUnityVersion — $unityEditorPath"
+}
+else {
+    Write-CheckResult 'FAIL' 'Unity Editor' "$expectedUnityVersion not found"
+}
+
+$windowsSupportPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Data\PlaybackEngines\WindowsStandaloneSupport"
+$webGlSupportPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Data\PlaybackEngines\WebGLSupport"
+foreach ($module in @(
+    @{ Name = 'Windows Standalone Support'; Path = $windowsSupportPath },
+    @{ Name = 'WebGL Build Support'; Path = $webGlSupportPath }
+)) {
+    if (Test-Path -LiteralPath $module.Path) {
+        Write-CheckResult 'PASS' $module.Name $module.Path
+    }
+    else {
+        Write-CheckResult 'FAIL' $module.Name 'required module not found'
+    }
+}
+
+$visualStudioPath = 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\devenv.exe'
+if (Test-Path -LiteralPath $visualStudioPath) {
+    Write-CheckResult 'PASS' 'Visual Studio Community' $visualStudioPath
+
+    $instanceRoot = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances'
+    $stateFiles = if (Test-Path -LiteralPath $instanceRoot) {
+        Get-ChildItem -LiteralPath $instanceRoot -Filter 'state.json' -File -Recurse -ErrorAction SilentlyContinue
+    }
+    else {
+        @()
+    }
+    $stateText = ($stateFiles | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
+
+    if ($stateText -match 'Microsoft\.VisualStudio\.Workload\.ManagedGame') {
+        Write-CheckResult 'PASS' 'Visual Studio Unity workload' 'Microsoft.VisualStudio.Workload.ManagedGame'
+    }
+    else {
+        Write-CheckResult 'FAIL' 'Visual Studio Unity workload' 'registration not found'
+    }
+
+    if ($stateText -match 'Microsoft\.VisualStudio\.Component\.Unity') {
+        Write-CheckResult 'PASS' 'Visual Studio Tools for Unity' 'Microsoft.VisualStudio.Component.Unity'
+    }
+    else {
+        Write-CheckResult 'FAIL' 'Visual Studio Tools for Unity' 'registration not found'
+    }
+}
+else {
+    Write-CheckResult 'FAIL' 'Visual Studio Community' 'verified install path not found'
+}
+
+$runtimeFiles = @(
+    'C:\Windows\System32\vcruntime140.dll',
+    'C:\Windows\System32\msvcp140.dll',
+    'C:\Windows\SysWOW64\vcruntime140.dll',
+    'C:\Windows\SysWOW64\msvcp140.dll'
+)
+$missingRuntimeFiles = $runtimeFiles | Where-Object { -not (Test-Path -LiteralPath $_) }
+if ($missingRuntimeFiles) {
+    Write-CheckResult 'FAIL' 'Visual C++ runtime files' "missing: $($missingRuntimeFiles -join ', ')"
+}
+else {
+    Write-CheckResult 'PASS' 'Visual C++ runtime files' 'x64 and x86 runtime DLLs found'
 }
 
 $unityVersionPath = Join-Path $repoRoot 'ProjectSettings/ProjectVersion.txt'
 if (Test-Path -LiteralPath $unityVersionPath) {
     $unityVersionText = Get-Content -Raw -LiteralPath $unityVersionPath
     $unityVersion = if ($unityVersionText -match 'm_EditorVersion:\s*(.+)') { $Matches[1].Trim() } else { 'version marker unreadable' }
-    Write-CheckResult 'PASS' 'Unity project marker' $unityVersion
+    if ($unityVersion -eq $expectedUnityVersion) {
+        Write-CheckResult 'PASS' 'Unity project marker' $unityVersion
+    }
+    else {
+        Write-CheckResult 'FAIL' 'Unity project marker' "expected $expectedUnityVersion, found $unityVersion"
+    }
 }
 else {
-    Write-CheckResult 'SKIP' 'Unity' 'DEV-BOOT-01 not completed'
+    Write-CheckResult 'SKIP' 'Unity project' 'DEV-BOOT-01 project baseline not completed'
 }
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot '.agents/skills/wwi-recovery-smoke/SKILL.md')) {
