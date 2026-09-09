@@ -263,7 +263,8 @@ else {
     Write-CheckResult 'PASS' 'Visual C++ runtime files' 'x64 and x86 runtime DLLs found'
 }
 
-$unityVersionPath = Join-Path $repoRoot 'ProjectSettings/ProjectVersion.txt'
+$unityProjectRoot = Join-Path $repoRoot 'Game'
+$unityVersionPath = Join-Path $unityProjectRoot 'ProjectSettings/ProjectVersion.txt'
 if (Test-Path -LiteralPath $unityVersionPath) {
     $unityVersionText = Get-Content -Raw -LiteralPath $unityVersionPath
     $unityVersion = if ($unityVersionText -match 'm_EditorVersion:\s*(.+)') { $Matches[1].Trim() } else { 'version marker unreadable' }
@@ -275,7 +276,7 @@ if (Test-Path -LiteralPath $unityVersionPath) {
     }
 }
 else {
-    Write-CheckResult 'SKIP' 'Unity project' 'DEV-BOOT-01 project baseline not completed'
+    Write-CheckResult 'FAIL' 'Unity project' "missing $unityVersionPath"
 }
 
 if (Test-Path -LiteralPath (Join-Path $repoRoot '.agents/skills/wwi-recovery-smoke/SKILL.md')) {
