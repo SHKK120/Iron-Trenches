@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — Territory Graph Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b100d;
+      color: #f4f1df;
+      --blue: #4aa9ec;
+      --blue-dark: #163d5c;
+      --red: #e46a5e;
+      --red-dark: #5a241f;
+      --frontline: #f4ca55;
+      --line: #556052;
+      --panel: rgba(20, 27, 21, 0.96);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(214, 194, 127, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(214, 194, 127, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 48% 30%, #263025 0, #111711 38%, #080c0a 82%);
+      background-size: 32px 32px, 32px 32px, auto;
+    }
+
+    main {
+      width: min(1240px, calc(100% - 28px));
+      margin: 24px auto;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    .kicker {
+      margin: 0 0 8px;
+      color: #d7bd6d;
+      font-size: 0.76rem;
+      font-weight: 900;
+      letter-spacing: 0.17em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.65rem, 3vw, 2.7rem); }
+    header p { max-width: 600px; margin: 8px 0 0; color: #b9c2ae; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; color: #ced5c4; font-size: 0.84rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .swatch { width: 13px; height: 13px; border-radius: 4px; }
+    .swatch.blue { background: var(--blue); }
+    .swatch.red { background: var(--red); }
+    .swatch.frontline { width: 24px; height: 4px; border-radius: 999px; background: var(--frontline); box-shadow: 0 0 9px var(--frontline); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 18px;
+    }
+
+    .map-panel,
+    .side-panel {
+      border: 1px solid #465044;
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: 0 24px 68px rgba(0, 0, 0, 0.32);
+    }
+
+    .map-panel { padding: 16px; }
+
+    .territory-map {
+      position: relative;
+      min-height: 650px;
+      overflow: hidden;
+      border: 1px solid #333d33;
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at center, rgba(214, 190, 111, 0.09), transparent 48%),
+        #0e140f;
+    }
+
+    .connections {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .connection-shadow,
+    .connection {
+      vector-effect: non-scaling-stroke;
+      stroke-linecap: round;
+    }
+
+    .connection-shadow { stroke: #080b09; stroke-width: 12; opacity: 0.95; }
+    .connection { stroke: var(--line); stroke-width: 5; transition: stroke 180ms ease, filter 180ms ease; }
+    .connection.frontline { stroke: var(--frontline); filter: drop-shadow(0 0 7px var(--frontline)); }
+
+    .sector {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: 170px;
+      min-height: 124px;
+      padding: 12px;
+      transform: translate(-50%, -50%);
+      border: 2px solid;
+      border-radius: 14px;
+      text-align: center;
+      transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .sector.blue { border-color: var(--blue); background: linear-gradient(150deg, rgba(35, 104, 151, 0.86), var(--blue-dark)); }
+    .sector.red { border-color: var(--red); background: linear-gradient(150deg, rgba(145, 55, 48, 0.9), var(--red-dark)); }
+    .sector.selected { box-shadow: 0 0 0 4px rgba(244, 202, 85, 0.34), 0 0 28px rgba(244, 202, 85, 0.34); }
+
+    .sector-name { margin: 0; font-size: 1.08rem; letter-spacing: 0.04em; }
+    .sector-owner { margin: 4px 0 9px; color: #f1f3e9; font-size: 0.82rem; font-weight: 800; }
+
+    .anchor {
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      border-radius: 8px;
+      background: rgba(9, 13, 10, 0.72);
+      color: #fff7d7;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .anchor:hover,
+    .anchor:focus-visible { border-color: var(--frontline); outline: none; background: rgba(45, 41, 22, 0.9); }
+    .anchor::before { content: "◆ "; color: var(--frontline); }
+
+    .side-panel { display: flex; flex-direction: column; padding: 20px; }
+    .side-panel h2 { margin: 0 0 12px; font-size: 1rem; color: #d8dfce; }
+
+    .selection {
+      min-height: 138px;
+      padding: 14px;
+      border: 1px solid #3b463a;
+      border-radius: 10px;
+      background: #0d130f;
+    }
+
+    .selection strong { display: block; margin-bottom: 8px; color: #f3d984; font-size: 1.08rem; }
+    .selection dl { display: grid; grid-template-columns: 70px 1fr; gap: 7px; margin: 0; font-size: 0.86rem; }
+    .selection dt { color: #8f9b89; }
+    .selection dd { margin: 0; font-weight: 750; }
+
+    .controls { display: grid; grid-template-columns: 1fr auto; gap: 9px; margin: 12px 0 20px; }
+
+    button.action {
+      padding: 11px 13px;
+      border: 1px solid #66705c;
+      border-radius: 8px;
+      background: #333d2e;
+      color: #f5f3e6;
+      font: inherit;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    button.action.primary { border-color: #d5b64f; background: #695a27; }
+    button.action:hover:not(:disabled) { filter: brightness(1.16); }
+    button.action:disabled { cursor: not-allowed; opacity: 0.42; }
+
+    .frontline-readout {
+      padding: 12px;
+      border-radius: 9px;
+      background: #171c14;
+      color: #e8ce79;
+      font-size: 0.84rem;
+      font-weight: 800;
+      line-height: 1.55;
+    }
+
+    .event-log {
+      flex: 1;
+      min-height: 190px;
+      max-height: 260px;
+      margin: 0;
+      padding: 10px 10px 10px 28px;
+      overflow: auto;
+      border: 1px solid #3b463a;
+      border-radius: 10px;
+      background: #0b100d;
+      color: #bdc7b4;
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .event-log li + li { margin-top: 7px; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 12px;
+      color: #849080;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 900px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .workspace { grid-template-columns: 1fr; }
+      .territory-map { min-height: 620px; }
+      .side-panel { min-height: 0; }
+    }
+
+    @media (max-width: 560px) {
+      .territory-map { min-height: 710px; }
+      .sector { width: 138px; min-height: 112px; padding: 9px; }
+      .sector[data-sector="west"] { --x: 24% !important; }
+      .sector[data-sector="east"] { --x: 76% !important; }
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">Playable Domain Preview</p>
+        <h1>Territory Graph + Control Anchors</h1>
+        <p>거점을 선택하고 점령 완료를 적용해 Sector 소유권과 파생 Frontline의 이동을 확인하세요.</p>
+      </div>
+      <div class="legend" aria-label="지도 범례">
+        <span><i class="swatch blue"></i>Blue</span>
+        <span><i class="swatch red"></i>Red</span>
+        <span><i class="swatch frontline"></i>Frontline</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <section class="map-panel" aria-label="Territory 전략 지도">
+        <div class="territory-map" id="territory-map">
+          <svg class="connections" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <line class="connection-shadow" x1="18" y1="50" x2="50" y2="50"></line>
+            <line class="connection" data-edge="west|center" x1="18" y1="50" x2="50" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="50" x2="82" y2="50"></line>
+            <line class="connection" data-edge="center|east" x1="50" y1="50" x2="82" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="17" x2="50" y2="50"></line>
+            <line class="connection" data-edge="center|north" x1="50" y1="17" x2="50" y2="50"></line>
+            <line class="connection-shadow" x1="50" y1="50" x2="50" y2="83"></line>
+            <line class="connection" data-edge="center|south" x1="50" y1="50" x2="50" y2="83"></line>
+          </svg>
+
+          <article class="sector" data-sector="west" style="--x: 18%; --y: 50%;">
+            <h2 class="sector-name">West</h2>
+            <p class="sector-owner"></p>
+            <button class="anchor" type="button" data-anchor="anchor-west">Anchor-W</button>
+          </article>
+          <article class="sector" data-sector="center" style="--x: 50%; --y: 50%;">
+            <h2 class="sector-name">Center</h2>
+            <p class="sector-owner"></p>
+            <button class="anchor" type="button" data-anchor="anchor-center">Anchor-C</button>
+          </article>
+          <article class="sector" data-sector="east" style="--x: 82%; --y: 50%;">
+            <h2 class="sector-name">East</h2>
+            <p class="sector-owner"></p>
+            <button class="anchor" type="button" data-anchor="anchor-east">Anchor-E</button>
+          </article>
+          <article class="sector" data-sector="north" style="--x: 50%; --y: 17%;">
+            <h2 class="sector-name">North</h2>
+            <p class="sector-owner"></p>
+            <button class="anchor" type="button" data-anchor="anchor-north">Anchor-N</button>
+          </article>
+          <article class="sector" data-sector="south" style="--x: 50%; --y: 83%;">
+            <h2 class="sector-name">South</h2>
+            <p class="sector-owner"></p>
+            <button class="anchor" type="button" data-anchor="anchor-south">Anchor-S</button>
+          </article>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <h2>선택한 Control Anchor</h2>
+        <div class="selection" id="selection" aria-live="polite">
+          <strong>거점을 선택하세요</strong>
+          <span>지도에서 ◆ Control Anchor를 클릭합니다.</span>
+        </div>
+
+        <div class="controls">
+          <button class="action primary" id="complete-capture" type="button" disabled>점령 완료 시험</button>
+          <button class="action" id="reset-preview" type="button">Reset</button>
+        </div>
+
+        <h2>현재 Frontline</h2>
+        <div class="frontline-readout" id="frontline-readout" aria-live="polite"></div>
+
+        <h2 style="margin-top: 20px;">Event Log</h2>
+        <ol class="event-log" id="event-log" aria-live="polite"></ol>
+      </aside>
+    </div>
+
+    <footer>
+      <span>PLAYABLE DOMAIN PREVIEW</span>
+      <span>Not Unity Runtime / Not Source of Truth</span>
+    </footer>
+  </main>
+
+  <script>
+    const sectorDefinitions = Object.freeze({
+      west: { name: "West", anchorId: "anchor-west", anchorName: "Anchor-W", initialOwner: "Blue" },
+      center: { name: "Center", anchorId: "anchor-center", anchorName: "Anchor-C", initialOwner: "Red" },
+      east: { name: "East", anchorId: "anchor-east", anchorName: "Anchor-E", initialOwner: "Red" },
+      north: { name: "North", anchorId: "anchor-north", anchorName: "Anchor-N", initialOwner: "Red" },
+      south: { name: "South", anchorId: "anchor-south", anchorName: "Anchor-S", initialOwner: "Blue" }
+    });
+
+    const topology = Object.freeze([
+      ["west", "center"],
+      ["center", "east"],
+      ["center", "north"],
+      ["center", "south"]
+    ]);
+
+    const state = {
+      owners: {},
+      selectedSectorId: null,
+      events: []
+    };
+
+    function resetState() {
+      state.owners = Object.fromEntries(
+        Object.entries(sectorDefinitions).map(([sectorId, definition]) => [sectorId, definition.initialOwner])
+      );
+      state.selectedSectorId = null;
+      state.events = ["Scenario reset: Control Anchor를 선택해 점령 완료를 시험하세요."];
+    }
+
+    function edgeKey(first, second) {
+      return [first, second].sort().join("|");
+    }
+
+    function edgeLabel(first, second) {
+      return `${sectorDefinitions[first].name}–${sectorDefinitions[second].name}`;
+    }
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => state.owners[first] !== state.owners[second]);
+    }
+
+    function frontlineKeys(frontlines) {
+      return new Set(frontlines.map(([first, second]) => edgeKey(first, second)));
+    }
+
+    function selectSector(sectorId) {
+      if (!sectorDefinitions[sectorId]) {
+        throw new Error(`Unknown sector: ${sectorId}`);
+      }
+
+      state.selectedSectorId = sectorId;
+      render();
+    }
+
+    function completeSelectedCapture() {
+      const sectorId = state.selectedSectorId;
+      if (!sectorId) {
+        return;
+      }
+
+      const before = deriveFrontlines();
+      const previousOwner = state.owners[sectorId];
+      if (previousOwner === "Blue") {
+        state.events.unshift(`${sectorDefinitions[sectorId].anchorName}: 이미 Blue 소유 — 변경 없음.`);
+        render();
+        return;
+      }
+
+      state.owners[sectorId] = "Blue";
+      const after = deriveFrontlines();
+      const beforeKeys = frontlineKeys(before);
+      const afterKeys = frontlineKeys(after);
+      const removed = before.filter(edge => !afterKeys.has(edgeKey(...edge)));
+      const added = after.filter(edge => !beforeKeys.has(edgeKey(...edge)));
+
+      state.events.unshift(`${sectorDefinitions[sectorId].name}: ${previousOwner} → Blue`);
+      state.events.unshift(`${sectorDefinitions[sectorId].anchorName} 점령 완료`);
+      if (removed.length) {
+        state.events.unshift(`Frontline 제거: ${removed.map(edge => edgeLabel(...edge)).join(", ")}`);
+      }
+      if (added.length) {
+        state.events.unshift(`Frontline 생성: ${added.map(edge => edgeLabel(...edge)).join(", ")}`);
+      }
+
+      render();
+    }
+
+    function render() {
+      for (const [sectorId, definition] of Object.entries(sectorDefinitions)) {
+        const sectorElement = document.querySelector(`[data-sector="${sectorId}"]`);
+        const owner = state.owners[sectorId];
+        sectorElement.className = `sector ${owner.toLowerCase()}${state.selectedSectorId === sectorId ? " selected" : ""}`;
+        sectorElement.querySelector(".sector-owner").textContent = `Owner: ${owner}`;
+        sectorElement.querySelector(".anchor").setAttribute(
+          "aria-label",
+          `${definition.anchorName}, ${definition.name}, ${owner} 소유`
+        );
+      }
+
+      const currentFrontlines = deriveFrontlines();
+      const currentKeys = frontlineKeys(currentFrontlines);
+      document.querySelectorAll("[data-edge]").forEach(line => {
+        const [first, second] = line.dataset.edge.split("|");
+        line.classList.toggle("frontline", currentKeys.has(edgeKey(first, second)));
+      });
+
+      const selection = document.getElementById("selection");
+      const captureButton = document.getElementById("complete-capture");
+      if (state.selectedSectorId) {
+        const definition = sectorDefinitions[state.selectedSectorId];
+        const owner = state.owners[state.selectedSectorId];
+        selection.innerHTML = `
+          <strong>${definition.anchorName}</strong>
+          <dl>
+            <dt>Sector</dt><dd>${definition.name}</dd>
+            <dt>Owner</dt><dd>${owner}</dd>
+            <dt>역할</dt><dd>Sector Ownership Anchor</dd>
+          </dl>`;
+        captureButton.disabled = owner === "Blue";
+        captureButton.textContent = owner === "Blue" ? "이미 Blue 소유" : "점령 완료 시험";
+      } else {
+        selection.innerHTML = "<strong>거점을 선택하세요</strong><span>지도에서 ◆ Control Anchor를 클릭합니다.</span>";
+        captureButton.disabled = true;
+        captureButton.textContent = "점령 완료 시험";
+      }
+
+      document.getElementById("frontline-readout").textContent = currentFrontlines.length
+        ? currentFrontlines.map(edge => edgeLabel(...edge)).join(" · ")
+        : "현재 Frontline 없음";
+      document.getElementById("event-log").innerHTML = state.events
+        .map(event => `<li>${event}</li>`)
+        .join("");
+    }
+
+    document.querySelectorAll("[data-anchor]").forEach(anchor => {
+      anchor.addEventListener("click", () => {
+        selectSector(anchor.closest("[data-sector]").dataset.sector);
+      });
+    });
+
+    document.getElementById("complete-capture").addEventListener("click", completeSelectedCapture);
+    document.getElementById("reset-preview").addEventListener("click", () => {
+      resetState();
+      render();
+    });
+
+    resetState();
+    render();
+  </script>
+</body>
+</html>

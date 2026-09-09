@@ -124,4 +124,171 @@ ExpectThrows<ArgumentNullException>(
     () => SectorCapture.Complete(null!, "red"),
     "Null capture sector was accepted.");
 
+var controlAnchor = new SectorControlAnchor("anchor-west", "territory-west");
+Expect(controlAnchor.AnchorId == "anchor-west", "Control anchor id was not retained.");
+Expect(controlAnchor.SectorId == "territory-west", "Control anchor sector id was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new SectorControlAnchor("", "territory-west"),
+    "Blank control anchor id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new SectorControlAnchor("anchor-invalid", " "),
+    "Blank control anchor sector id was accepted.");
+
+var territoryTopology = new SectorTopology();
+territoryTopology.RegisterSector("territory-west");
+territoryTopology.RegisterSector("territory-center");
+territoryTopology.RegisterSector("territory-east");
+territoryTopology.AddBidirectionalAdjacency("territory-west", "territory-center");
+territoryTopology.AddBidirectionalAdjacency("territory-center", "territory-east");
+
+var territoryWest = new SectorState("territory-west", "blue");
+var territoryCenter = new SectorState("territory-center", "red");
+var territoryEast = new SectorState("territory-east", "red");
+var territoryStates = new[] { territoryWest, territoryCenter, territoryEast };
+var territoryAnchors = new[]
+{
+    new SectorControlAnchor("anchor-west", "territory-west"),
+    new SectorControlAnchor("anchor-center", "territory-center"),
+    new SectorControlAnchor("anchor-east", "territory-east")
+};
+var territory = new TerritoryGraph(territoryTopology, territoryStates, territoryAnchors);
+
+Expect(ReferenceEquals(territory.Topology, territoryTopology), "Territory topology reference was not retained.");
+Expect(
+    territory.GetControlAnchorForSector("territory-center").AnchorId == "anchor-center",
+    "Sector-to-anchor lookup returned the wrong anchor.");
+Expect(
+    ReferenceEquals(territory.GetSectorForAnchor("anchor-center"), territoryCenter),
+    "Anchor-to-sector lookup returned the wrong sector.");
+Expect(
+    territory.GetSectorForAnchor("anchor-west").OwnerId == "blue",
+    "Anchor owner did not resolve through its sector owner.");
+
+var territoryBeforeCapture = territory.GetFrontlines();
+var territoryWestCenter = new FrontlineEdge("territory-west", "territory-center");
+var territoryCenterEast = new FrontlineEdge("territory-center", "territory-east");
+Expect(territoryBeforeCapture.Count == 1, "Territory initial frontline count was not one.");
+Expect(territoryBeforeCapture.Contains(territoryWestCenter), "Territory initial west-center frontline was missing.");
+
+var territoryCapture = territory.CompleteAnchorCapture("anchor-center", "blue");
+Expect(territoryCapture.Changed, "Enemy anchor capture did not report a change.");
+Expect(territoryCapture.PreviousOwnerId == "red", "Anchor capture lost the previous owner.");
+Expect(territoryCapture.NewOwnerId == "blue", "Anchor capture lost the new owner.");
+Expect(territoryCenter.OwnerId == "blue", "Anchor capture did not change its sector owner.");
+Expect(territoryWest.OwnerId == "blue", "Anchor capture changed another sector owner.");
+Expect(territoryEast.OwnerId == "red", "Anchor capture changed the east sector owner.");
+
+var territoryAfterCapture = territory.GetFrontlines();
+Expect(territoryAfterCapture.Count == 1, "Territory post-capture frontline count was not one.");
+Expect(!territoryAfterCapture.Contains(territoryWestCenter), "Old territory frontline remained after capture.");
+Expect(territoryAfterCapture.Contains(territoryCenterEast), "New territory frontline was missing after capture.");
+
+var territorySameOwnerCapture = territory.CompleteAnchorCapture("anchor-center", "blue");
+Expect(!territorySameOwnerCapture.Changed, "Same-owner anchor capture reported a change.");
+Expect(
+    territory.GetFrontlines().Contains(territoryCenterEast),
+    "Same-owner anchor capture changed the frontline.");
+ExpectThrows<KeyNotFoundException>(
+    () => territory.CompleteAnchorCapture("anchor-missing", "blue"),
+    "Missing control anchor capture was accepted.");
+ExpectThrows<KeyNotFoundException>(
+    () => territory.GetControlAnchorForSector("territory-missing"),
+    "Missing sector anchor lookup was accepted.");
+
+ExpectThrows<ArgumentException>(
+    () => new TerritoryGraph(
+        territoryTopology,
+        territoryStates,
+        new[]
+        {
+            new SectorControlAnchor("anchor-duplicate", "territory-west"),
+            new SectorControlAnchor("anchor-duplicate", "territory-center"),
+            new SectorControlAnchor("anchor-east", "territory-east")
+        }),
+    "Duplicate control anchor id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new TerritoryGraph(
+        territoryTopology,
+        territoryStates,
+        new[]
+        {
+            new SectorControlAnchor("anchor-west-a", "territory-west"),
+            new SectorControlAnchor("anchor-west-b", "territory-west"),
+            new SectorControlAnchor("anchor-center", "territory-center"),
+            new SectorControlAnchor("anchor-east", "territory-east")
+        }),
+    "Second control anchor for one sector was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new TerritoryGraph(
+        territoryTopology,
+        territoryStates,
+        new[]
+        {
+            new SectorControlAnchor("anchor-west", "territory-west"),
+            new SectorControlAnchor("anchor-center", "territory-center"),
+            new SectorControlAnchor("anchor-east", "territory-east"),
+            new SectorControlAnchor("anchor-outside", "territory-outside")
+        }),
+    "Control anchor for an unregistered sector was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new TerritoryGraph(
+        territoryTopology,
+        territoryStates,
+        new[]
+        {
+            new SectorControlAnchor("anchor-west", "territory-west"),
+            new SectorControlAnchor("anchor-center", "territory-center")
+        }),
+    "Territory with a sector missing its control anchor was accepted.");
+
+var crossTopology = new SectorTopology();
+foreach (var sectorId in new[] { "cross-west", "cross-center", "cross-east", "cross-north", "cross-south" })
+{
+    crossTopology.RegisterSector(sectorId);
+}
+
+crossTopology.AddBidirectionalAdjacency("cross-center", "cross-west");
+crossTopology.AddBidirectionalAdjacency("cross-center", "cross-east");
+crossTopology.AddBidirectionalAdjacency("cross-center", "cross-north");
+crossTopology.AddBidirectionalAdjacency("cross-center", "cross-south");
+
+var crossCenter = new SectorState("cross-center", "blue");
+var crossEast = new SectorState("cross-east", "red");
+var crossTerritory = new TerritoryGraph(
+    crossTopology,
+    new[]
+    {
+        new SectorState("cross-west", "blue"),
+        crossCenter,
+        crossEast,
+        new SectorState("cross-north", "red"),
+        new SectorState("cross-south", "red")
+    },
+    new[]
+    {
+        new SectorControlAnchor("cross-anchor-west", "cross-west"),
+        new SectorControlAnchor("cross-anchor-center", "cross-center"),
+        new SectorControlAnchor("cross-anchor-east", "cross-east"),
+        new SectorControlAnchor("cross-anchor-north", "cross-north"),
+        new SectorControlAnchor("cross-anchor-south", "cross-south")
+    });
+
+var crossCenterEast = new FrontlineEdge("cross-center", "cross-east");
+var crossCenterNorth = new FrontlineEdge("cross-center", "cross-north");
+var crossCenterSouth = new FrontlineEdge("cross-center", "cross-south");
+var crossBeforeCapture = crossTerritory.GetFrontlines();
+Expect(crossBeforeCapture.Count == 3, "Five-sector initial frontline count was not three.");
+Expect(crossBeforeCapture.Contains(crossCenterEast), "Five-sector center-east frontline was missing.");
+Expect(crossBeforeCapture.Contains(crossCenterNorth), "Five-sector center-north frontline was missing.");
+Expect(crossBeforeCapture.Contains(crossCenterSouth), "Five-sector center-south frontline was missing.");
+
+var crossCapture = crossTerritory.CompleteAnchorCapture("cross-anchor-east", "blue");
+Expect(crossCapture.Changed, "Five-sector east anchor capture did not report a change.");
+Expect(crossEast.OwnerId == "blue", "Five-sector east anchor capture did not update ownership.");
+var crossAfterCapture = crossTerritory.GetFrontlines();
+Expect(crossAfterCapture.Count == 2, "Five-sector post-capture frontline count was not two.");
+Expect(!crossAfterCapture.Contains(crossCenterEast), "Captured center-east boundary remained a frontline.");
+Expect(crossAfterCapture.Contains(crossCenterNorth), "Center-north frontline was lost after east capture.");
+Expect(crossAfterCapture.Contains(crossCenterSouth), "Center-south frontline was lost after east capture.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");

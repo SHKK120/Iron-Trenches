@@ -72,8 +72,9 @@ $requiredFiles = @(
     'docs/50_닫을것.md',
     'docs/60_나중에.md',
     'docs/지시장부.md',
-    'Preview/README.md',
-    'Preview/index.html',
+    'previews/README.md',
+    'previews/index.html',
+    'previews/RTS_CORE_01C_Territory.html',
     'tools/ManagedPcChecks/ManagedPcChecks.csproj'
 )
 
@@ -104,12 +105,12 @@ else {
     Write-CheckResult 'BLOCKED' 'Source-only .NET SDK' 'not found; use an approved official .NET 8 SDK installation path and do not install Unity only for this check'
 }
 
-$previewPath = Join-Path $repoRoot 'Preview/index.html'
+$previewPath = Join-Path $repoRoot 'previews/RTS_CORE_01C_Territory.html'
 if (Test-Path -LiteralPath $previewPath) {
     Write-CheckResult 'PASS' 'Browser Playable Preview' $previewPath
 }
 else {
-    Write-CheckResult 'FAIL' 'Browser Playable Preview' 'Preview/index.html missing'
+    Write-CheckResult 'FAIL' 'Browser Playable Preview' 'previews/RTS_CORE_01C_Territory.html missing'
 }
 
 $dashboardPath = Join-Path $repoRoot 'docs/40_구현순서.md'
