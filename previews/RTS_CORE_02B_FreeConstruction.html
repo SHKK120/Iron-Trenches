@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — Sector-Scoped Free Construction</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #080c09;
+      color: #f3f0df;
+      --blue: #56b5ef;
+      --blue-fill: #173f59;
+      --red: #e17469;
+      --red-fill: #56251f;
+      --gold: #e7c75d;
+      --green: #6ce09b;
+      --danger: #ff766d;
+      --panel: rgba(17, 24, 18, 0.98);
+      --muted: #9daa99;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(217, 194, 116, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(217, 194, 116, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 48% 6%, #2a3428 0, #111711 42%, #070a08 82%);
+      background-size: 28px 28px, 28px 28px, auto;
+    }
+
+    button { font: inherit; }
+    main { width: min(1480px, calc(100% - 28px)); margin: 20px auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      margin-bottom: 14px;
+    }
+
+    .kicker, .prototype-label {
+      margin: 0 0 7px;
+      color: #d8bb5f;
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.65rem, 3vw, 2.65rem); }
+    header p:not(.kicker) { max-width: 760px; margin: 8px 0 0; color: #b7c0ae; line-height: 1.5; }
+
+    .hud {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(130px, 1fr));
+      gap: 9px;
+      min-width: min(520px, 100%);
+    }
+
+    .hud-card {
+      padding: 11px 13px;
+      border: 1px solid #465144;
+      border-radius: 10px;
+      background: #101711;
+    }
+
+    .hud-card span { display: block; color: #879483; font-size: 0.65rem; font-weight: 850; letter-spacing: 0.09em; text-transform: uppercase; }
+    .hud-card strong { display: block; margin-top: 4px; color: #f5d878; font-size: 1.2rem; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 370px; gap: 16px; }
+    .map-panel, .side-panel { border: 1px solid #465044; border-radius: 15px; background: var(--panel); box-shadow: 0 22px 62px rgba(0, 0, 0, 0.36); }
+    .map-panel { padding: 13px; }
+
+    .map-instruction {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 3px 3px 11px;
+      color: #aeb8a7;
+      font-size: 0.78rem;
+    }
+
+    .map-instruction strong { color: #f0d475; }
+
+    #battlefield {
+      display: block;
+      width: 100%;
+      min-height: 620px;
+      border: 1px solid #303a31;
+      border-radius: 11px;
+      background: #0b110d;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .sector-area { stroke-width: 3; transition: filter 150ms ease, stroke-width 150ms ease; }
+    .sector-area.blue { fill: var(--blue-fill); stroke: var(--blue); }
+    .sector-area.red { fill: var(--red-fill); stroke: var(--red); }
+    .sector-area.selected { stroke: var(--gold); stroke-width: 8; filter: drop-shadow(0 0 11px rgba(231, 199, 93, 0.85)); }
+    .sector-name { fill: #f7f4e8; font-size: 23px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+    .sector-meta { fill: #d7ddcf; font-size: 13px; font-weight: 750; text-anchor: middle; pointer-events: none; }
+    .anchor { fill: #111812; stroke: #f3d66d; stroke-width: 4; cursor: pointer; }
+    .anchor-label { fill: #ffe792; font-size: 12px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+    .frontline { stroke: transparent; stroke-width: 10; stroke-linecap: round; pointer-events: none; }
+    .frontline.active { stroke: var(--gold); filter: drop-shadow(0 0 8px var(--gold)); }
+    .site-footprint { fill: rgba(236, 194, 74, 0.2); stroke: #f0c94b; stroke-width: 4; }
+    .site-core { fill: #161b15; stroke: #fff1b5; stroke-width: 2; }
+    .site-label { fill: #fff8da; font-size: 11px; font-weight: 900; text-anchor: middle; pointer-events: none; }
+    .ghost { pointer-events: none; stroke-width: 5; stroke-dasharray: 10 7; }
+    .ghost.valid { fill: rgba(64, 220, 127, 0.24); stroke: var(--green); }
+    .ghost.invalid { fill: rgba(255, 83, 75, 0.23); stroke: var(--danger); }
+    .ghost-label { fill: #fff; font-size: 14px; font-weight: 950; text-anchor: middle; paint-order: stroke; stroke: #090d0a; stroke-width: 5px; pointer-events: none; }
+
+    .side-panel { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+    .panel-box { padding: 13px; border: 1px solid #394339; border-radius: 10px; background: #0b110d; }
+    .panel-box h2 { margin: 0 0 9px; color: #dce3d4; font-size: 0.92rem; }
+    .sector-status strong { display: block; color: #f0d370; font-size: 1.05rem; }
+    .sector-status span { display: block; margin-top: 5px; color: var(--muted); font-size: 0.78rem; }
+    .availability.available { color: var(--green); }
+    .availability.blocked { color: var(--danger); }
+
+    .build-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .build-button, .action {
+      padding: 10px;
+      border: 1px solid #64705f;
+      border-radius: 8px;
+      background: #303a2c;
+      color: #f4f1e4;
+      cursor: pointer;
+      font-weight: 850;
+    }
+
+    .build-button span { display: block; margin-top: 3px; color: #c9d1c3; font-size: 0.7rem; }
+    .build-button.active { border-color: var(--green); background: #245638; box-shadow: 0 0 0 2px rgba(108, 224, 155, 0.18); }
+    .action.primary { border-color: #d1b653; background: #665624; }
+    .action.collect { border-color: #4f9bcd; background: #204c6a; }
+    .action.danger { border-color: #8c554f; background: #472a27; }
+    .build-button:hover, .action:hover:not(:disabled) { filter: brightness(1.14); }
+    .action:disabled { cursor: not-allowed; opacity: 0.42; }
+
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .control-grid .wide { grid-column: 1 / -1; }
+
+    #placement-status {
+      min-height: 50px;
+      padding: 10px;
+      border-left: 4px solid #667064;
+      background: #121813;
+      color: #b9c3b1;
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    #placement-status.valid { border-color: var(--green); color: #a8f2c3; }
+    #placement-status.invalid { border-color: var(--danger); color: #ffaaa5; }
+    .frontline-readout { color: #ecd174; font-size: 0.76rem; font-weight: 800; line-height: 1.5; }
+
+    .site-list, .event-log {
+      margin: 0;
+      padding-left: 22px;
+      overflow: auto;
+      font-size: 0.74rem;
+      line-height: 1.5;
+    }
+
+    .site-list { min-height: 42px; max-height: 120px; color: #d8dfd1; }
+    .event-log { min-height: 128px; max-height: 190px; color: #aeb9a8; }
+    .site-list li + li, .event-log li + li { margin-top: 5px; }
+    footer { display: flex; justify-content: space-between; gap: 14px; margin-top: 10px; color: #7f8b7b; font-size: 0.68rem; letter-spacing: 0.07em; text-transform: uppercase; }
+
+    @media (max-width: 1080px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .hud { min-width: 0; width: 100%; }
+      .workspace { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 620px) {
+      .hud { grid-template-columns: 1fr; }
+      #battlefield { min-height: 450px; }
+      .map-instruction, footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">RTS-CORE-02B · Blue Construction Command</p>
+        <h1>Sector-Scoped Free Construction</h1>
+        <p>먼저 Sector를 선택하고 건물을 고른 뒤, 그 Sector 안의 자유 위치에 Ghost를 움직여 배치하세요. 선택 정보만 믿지 않고 실제 위치와 전체 Footprint를 다시 검사합니다.</p>
+      </div>
+      <div class="hud" aria-label="Blue 경제 및 건설 상태">
+        <div class="hud-card"><span>Blue Balance</span><strong id="blue-balance">0</strong></div>
+        <div class="hud-card"><span>Next Income</span><strong id="blue-income">+65</strong></div>
+        <div class="hud-card"><span>Construction Sites</span><strong id="site-count">0</strong></div>
+      </div>
+    </header>
+
+    <p class="prototype-label">Prototype: rectangular sector fixture + circular footprint · No fixed build slots · Not final balance or geometry</p>
+
+    <div class="workspace">
+      <section class="map-panel" aria-label="Sector 자유 건설 지도">
+        <div class="map-instruction">
+          <span><strong>1</strong> Sector 선택 → <strong>2</strong> 건물 선택 → <strong>3</strong> Ghost 이동 → <strong>4</strong> 위치 클릭</span>
+          <span>Green = Valid · Red = Invalid</span>
+        </div>
+        <svg id="battlefield" viewBox="0 0 900 600" role="application" aria-label="5 Sector construction test map">
+          <rect class="sector-area" data-sector-area="north" x="300" y="0" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="west" x="0" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="center" x="300" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="east" x="600" y="200" width="300" height="200"></rect>
+          <rect class="sector-area" data-sector-area="south" x="300" y="400" width="300" height="200"></rect>
+
+          <g aria-hidden="true">
+            <text class="sector-name" x="450" y="60">NORTH</text><text class="sector-meta" data-sector-meta="north" x="450" y="83"></text>
+            <text class="sector-name" x="150" y="260">WEST</text><text class="sector-meta" data-sector-meta="west" x="150" y="283"></text>
+            <text class="sector-name" x="450" y="260">CENTER</text><text class="sector-meta" data-sector-meta="center" x="450" y="283"></text>
+            <text class="sector-name" x="750" y="260">EAST</text><text class="sector-meta" data-sector-meta="east" x="750" y="283"></text>
+            <text class="sector-name" x="450" y="460">SOUTH</text><text class="sector-meta" data-sector-meta="south" x="450" y="483"></text>
+          </g>
+
+          <line class="frontline" data-edge="west|center" x1="300" y1="210" x2="300" y2="390"></line>
+          <line class="frontline" data-edge="center|east" x1="600" y1="210" x2="600" y2="390"></line>
+          <line class="frontline" data-edge="center|north" x1="310" y1="200" x2="590" y2="200"></line>
+          <line class="frontline" data-edge="center|south" x1="310" y1="400" x2="590" y2="400"></line>
+
+          <g class="anchor-button" data-anchor="north" tabindex="0" role="button" aria-label="North Control Anchor"><circle class="anchor" cx="450" cy="125" r="17"></circle><text class="anchor-label" x="450" y="130">A-N</text></g>
+          <g class="anchor-button" data-anchor="west" tabindex="0" role="button" aria-label="West Control Anchor"><circle class="anchor" cx="150" cy="330" r="17"></circle><text class="anchor-label" x="150" y="335">A-W</text></g>
+          <g class="anchor-button" data-anchor="center" tabindex="0" role="button" aria-label="Center Control Anchor"><circle class="anchor" cx="450" cy="330" r="17"></circle><text class="anchor-label" x="450" y="335">A-C</text></g>
+          <g class="anchor-button" data-anchor="east" tabindex="0" role="button" aria-label="East Control Anchor"><circle class="anchor" cx="750" cy="330" r="17"></circle><text class="anchor-label" x="750" y="335">A-E</text></g>
+          <g class="anchor-button" data-anchor="south" tabindex="0" role="button" aria-label="South Control Anchor"><circle class="anchor" cx="450" cy="530" r="17"></circle><text class="anchor-label" x="450" y="535">A-S</text></g>
+
+          <g id="sites-layer" aria-label="Construction Sites"></g>
+          <g id="ghost-layer" hidden>
+            <circle id="ghost-footprint" class="ghost invalid" cx="0" cy="0" r="1"></circle>
+            <text id="ghost-label" class="ghost-label" x="0" y="0">INVALID</text>
+          </g>
+        </svg>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-box sector-status" aria-live="polite">
+          <h2>Selected Sector</h2>
+          <strong id="selected-sector">Select a sector first</strong>
+          <span id="selected-owner">Map의 Sector 또는 Anchor를 클릭하세요.</span>
+          <span class="availability blocked" id="construction-availability">Construction unavailable</span>
+        </section>
+
+        <section class="panel-box">
+          <h2>Build Panel · [시험값]</h2>
+          <div class="build-grid">
+            <button class="build-button" type="button" data-building="barracks">Barracks<span>Cost 50 · Radius 18</span></button>
+            <button class="build-button" type="button" data-building="depot">Depot<span>Cost 35 · Radius 14</span></button>
+          </div>
+          <div id="placement-status">Sector를 먼저 선택하세요.</div>
+        </section>
+
+        <section class="control-grid" aria-label="Preview controls">
+          <button class="action collect" id="collect-income" type="button">Collect Income</button>
+          <button class="action primary" id="capture-sector" type="button" disabled>Capture Selected Anchor</button>
+          <button class="action danger" id="cancel-placement" type="button">Cancel Placement</button>
+          <button class="action wide" id="reset-preview" type="button">Reset All</button>
+        </section>
+
+        <section class="panel-box">
+          <h2>Current Frontline</h2>
+          <div class="frontline-readout" id="frontline-readout"></div>
+        </section>
+
+        <section class="panel-box">
+          <h2>Construction Sites · Type / Owner / Sector</h2>
+          <ol class="site-list" id="site-list"><li>아직 Site 없음</li></ol>
+        </section>
+
+        <section class="panel-box">
+          <h2>Event Log</h2>
+          <ol class="event-log" id="event-log" aria-live="polite"></ol>
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <span>Playable domain preview · no timer · no supply requirement</span>
+      <span>Not Unity Runtime / Not Source of Truth</span>
+    </footer>
+  </main>
+
+  <script>
+    const sectors = Object.freeze({
+      west:   { name: "West",   income: 40, initialOwner: "Blue", bounds: [0, 300, 200, 400] },
+      center: { name: "Center", income: 60, initialOwner: "Red",  bounds: [300, 600, 200, 400] },
+      east:   { name: "East",   income: 50, initialOwner: "Red",  bounds: [600, 900, 200, 400] },
+      north:  { name: "North",  income: 35, initialOwner: "Red",  bounds: [300, 600, 0, 200] },
+      south:  { name: "South",  income: 25, initialOwner: "Blue", bounds: [300, 600, 400, 600] }
+    });
+
+    const topology = Object.freeze([
+      ["west", "center"], ["center", "east"], ["center", "north"], ["center", "south"]
+    ]);
+
+    const buildings = Object.freeze({
+      barracks: { name: "Barracks", cost: 50, radius: 18, drawRadius: 54 },
+      depot: { name: "Depot", cost: 35, radius: 14, drawRadius: 42 }
+    });
+
+    const state = {
+      owners: {}, balance: 0, selectedSectorId: null, selectedBuildingId: null,
+      ghost: null, sites: [], events: [], nextSiteNumber: 1
+    };
+
+    function resetState() {
+      state.owners = Object.fromEntries(Object.entries(sectors).map(([id, sector]) => [id, sector.initialOwner]));
+      state.balance = 0;
+      state.selectedSectorId = null;
+      state.selectedBuildingId = null;
+      state.ghost = null;
+      state.sites = [];
+      state.events = ["Scenario reset: select a Sector, then collect +65 and choose a building"];
+      state.nextSiteNumber = 1;
+      render();
+    }
+
+    function calculateIncome(factionId) {
+      return Object.entries(sectors).reduce(
+        (total, [id, sector]) => total + (state.owners[id] === factionId ? sector.income : 0), 0);
+    }
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => state.owners[first] !== state.owners[second]);
+    }
+
+    function resolveSector(x, y) {
+      for (const [id, sector] of Object.entries(sectors)) {
+        const [minX, maxX, minY, maxY] = sector.bounds;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) return id;
+      }
+      return null;
+    }
+
+    function containsFootprint(sectorId, x, y, radius) {
+      const sector = sectors[sectorId];
+      if (!sector) return false;
+      const [minX, maxX, minY, maxY] = sector.bounds;
+      return x - radius >= minX && x + radius <= maxX && y - radius >= minY && y + radius <= maxY;
+    }
+
+    function overlapsSite(x, y, radius) {
+      return state.sites.some(site => {
+        const dx = x - site.x;
+        const dy = y - site.y;
+        return (dx * dx) + (dy * dy) < Math.pow(radius + site.drawRadius, 2);
+      });
+    }
+
+    function validatePlacement(x, y) {
+      if (!state.selectedSectorId) return { valid: false, reason: "Select a sector first" };
+      if (state.owners[state.selectedSectorId] !== "Blue") return { valid: false, reason: "Enemy Territory" };
+      if (!state.selectedBuildingId) return { valid: false, reason: "Select a building" };
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { valid: false, reason: "Invalid Position" };
+
+      const definition = buildings[state.selectedBuildingId];
+      if (resolveSector(x, y) !== state.selectedSectorId) {
+        return { valid: false, reason: "Outside Selected Sector" };
+      }
+      if (!containsFootprint(state.selectedSectorId, x, y, definition.drawRadius)) {
+        return { valid: false, reason: "Footprint crosses sector boundary" };
+      }
+      if (overlapsSite(x, y, definition.drawRadius)) return { valid: false, reason: "Occupied" };
+      if (state.balance < definition.cost) return { valid: false, reason: "Insufficient Funds" };
+      return { valid: true, reason: `VALID · Sector: ${sectors[state.selectedSectorId].name}` };
+    }
+
+    function selectSector(sectorId) {
+      if (!sectors[sectorId]) throw new Error(`Unknown sector: ${sectorId}`);
+      state.selectedSectorId = sectorId;
+      state.selectedBuildingId = null;
+      state.ghost = null;
+      const owner = state.owners[sectorId];
+      state.events.unshift(`${sectors[sectorId].name} selected · Owner: ${owner}`);
+      if (owner === "Blue") state.events.unshift(`Construction available in ${sectors[sectorId].name}`);
+      else state.events.unshift("Enemy Territory · Construction unavailable");
+      render();
+      return owner === "Blue";
+    }
+
+    function selectBuilding(buildingId) {
+      if (!buildings[buildingId]) throw new Error(`Unknown building: ${buildingId}`);
+      if (!state.selectedSectorId) {
+        state.events.unshift("Placement rejected: Select a sector first");
+        render();
+        return false;
+      }
+      if (state.owners[state.selectedSectorId] !== "Blue") {
+        state.events.unshift("Placement rejected: Enemy Territory");
+        render();
+        return false;
+      }
+      state.selectedBuildingId = buildingId;
+      state.ghost = null;
+      state.events.unshift(`${buildings[buildingId].name} selected for ${sectors[state.selectedSectorId].name}`);
+      render();
+      return true;
+    }
+
+    function moveGhostTo(x, y) {
+      if (!state.selectedBuildingId) return { valid: false, reason: "Select a building" };
+      const validation = validatePlacement(x, y);
+      state.ghost = { x, y, ...validation };
+      renderGhost();
+      return validation;
+    }
+
+    function attemptPlacementAt(x, y) {
+      if (!state.selectedBuildingId) return { success: false, reason: "Select a building" };
+      const validation = validatePlacement(x, y);
+      if (!validation.valid) {
+        state.ghost = { x, y, ...validation };
+        state.events.unshift(`Placement rejected: ${validation.reason}`);
+        render();
+        return { success: false, reason: validation.reason };
+      }
+
+      const definition = buildings[state.selectedBuildingId];
+      const previousBalance = state.balance;
+      state.balance -= definition.cost;
+      const site = {
+        siteId: `site-${state.nextSiteNumber++}`,
+        buildingId: state.selectedBuildingId,
+        ownerId: "Blue",
+        sectorId: state.selectedSectorId,
+        x, y,
+        radius: definition.radius,
+        drawRadius: definition.drawRadius
+      };
+      state.sites.push(site);
+      state.events.unshift(`${definition.name} Site placed in ${sectors[site.sectorId].name} (-${definition.cost}): ${previousBalance} → ${state.balance}`);
+      state.selectedBuildingId = null;
+      state.ghost = null;
+      render();
+      return { success: true, site: { ...site }, previousBalance, newBalance: state.balance };
+    }
+
+    function collectBlueIncome() {
+      const amount = calculateIncome("Blue");
+      const previous = state.balance;
+      state.balance += amount;
+      state.events.unshift(`Blue collected +${amount}: ${previous} → ${state.balance}`);
+      render();
+      return amount;
+    }
+
+    function captureSelectedSector() {
+      const sectorId = state.selectedSectorId;
+      if (!sectorId) return false;
+      const previousOwner = state.owners[sectorId];
+      if (previousOwner === "Blue") return false;
+      const previousIncome = calculateIncome("Blue");
+      state.owners[sectorId] = "Blue";
+      state.selectedBuildingId = null;
+      state.ghost = null;
+      state.events.unshift(`${sectors[sectorId].name} captured: ${previousOwner} → Blue`);
+      state.events.unshift(`Blue next income: +${previousIncome} → +${calculateIncome("Blue")}`);
+      state.events.unshift(`Construction now available in ${sectors[sectorId].name}`);
+      render();
+      return true;
+    }
+
+    function cancelPlacement() {
+      state.selectedBuildingId = null;
+      state.ghost = null;
+      state.events.unshift("Placement mode cancelled · Sector selection retained");
+      render();
+    }
+
+    function edgeKey(first, second) { return [first, second].sort().join("|"); }
+    function edgeLabel([first, second]) { return `${sectors[first].name}–${sectors[second].name}`; }
+
+    function renderGhost() {
+      if (typeof document === "undefined") return;
+      const layer = document.getElementById("ghost-layer");
+      const status = document.getElementById("placement-status");
+      if (!state.selectedBuildingId || !state.ghost) {
+        layer.hidden = true;
+        status.className = "";
+        status.textContent = state.selectedBuildingId
+          ? "Map 위에서 Ghost를 움직이세요."
+          : state.selectedSectorId ? "건물 종류를 선택하세요." : "Sector를 먼저 선택하세요.";
+        return;
+      }
+
+      const definition = buildings[state.selectedBuildingId];
+      const circle = document.getElementById("ghost-footprint");
+      const label = document.getElementById("ghost-label");
+      layer.hidden = false;
+      circle.setAttribute("cx", state.ghost.x);
+      circle.setAttribute("cy", state.ghost.y);
+      circle.setAttribute("r", definition.drawRadius);
+      circle.setAttribute("class", `ghost ${state.ghost.valid ? "valid" : "invalid"}`);
+      label.setAttribute("x", state.ghost.x);
+      label.setAttribute("y", state.ghost.y + 5);
+      label.textContent = state.ghost.valid ? "VALID" : "INVALID";
+      status.className = state.ghost.valid ? "valid" : "invalid";
+      status.textContent = state.ghost.reason;
+    }
+
+    function render() {
+      if (typeof document === "undefined") return;
+      for (const [sectorId, sector] of Object.entries(sectors)) {
+        const area = document.querySelector(`[data-sector-area="${sectorId}"]`);
+        area.setAttribute("class", `sector-area ${state.owners[sectorId].toLowerCase()}${state.selectedSectorId === sectorId ? " selected" : ""}`);
+        document.querySelector(`[data-sector-meta="${sectorId}"]`).textContent = `Owner ${state.owners[sectorId]} · Income ${sector.income}`;
+      }
+
+      const activeFrontlines = new Set(deriveFrontlines().map(edge => edgeKey(...edge)));
+      document.querySelectorAll("[data-edge]").forEach(line => {
+        line.setAttribute("class", `frontline${activeFrontlines.has(edgeKey(...line.dataset.edge.split("|"))) ? " active" : ""}`);
+      });
+
+      document.getElementById("blue-balance").textContent = state.balance;
+      document.getElementById("blue-income").textContent = `+${calculateIncome("Blue")}`;
+      document.getElementById("site-count").textContent = state.sites.length;
+      document.getElementById("frontline-readout").textContent = deriveFrontlines().map(edgeLabel).join(" · ") || "현재 Frontline 없음";
+
+      const selected = state.selectedSectorId;
+      const selectedName = document.getElementById("selected-sector");
+      const selectedOwner = document.getElementById("selected-owner");
+      const availability = document.getElementById("construction-availability");
+      const captureButton = document.getElementById("capture-sector");
+      if (selected) {
+        const owner = state.owners[selected];
+        selectedName.textContent = `BUILD IN: ${sectors[selected].name.toUpperCase()}`;
+        selectedOwner.textContent = `Owner: ${owner} · Income ${sectors[selected].income}`;
+        availability.textContent = owner === "Blue" ? "Construction available" : "Enemy Territory · Construction unavailable";
+        availability.className = `availability ${owner === "Blue" ? "available" : "blocked"}`;
+        captureButton.disabled = owner === "Blue";
+        captureButton.textContent = owner === "Blue" ? "Already Blue" : `Capture ${sectors[selected].name} Anchor`;
+      } else {
+        selectedName.textContent = "Select a sector first";
+        selectedOwner.textContent = "Map의 Sector 또는 Anchor를 클릭하세요.";
+        availability.textContent = "Construction unavailable";
+        availability.className = "availability blocked";
+        captureButton.disabled = true;
+        captureButton.textContent = "Capture Selected Anchor";
+      }
+
+      document.querySelectorAll("[data-building]").forEach(button => {
+        button.classList.toggle("active", button.dataset.building === state.selectedBuildingId);
+      });
+
+      document.getElementById("sites-layer").innerHTML = state.sites.map(site => {
+        const label = buildings[site.buildingId].name === "Barracks" ? "B" : "D";
+        return `<g data-site="${site.siteId}"><circle class="site-footprint" cx="${site.x}" cy="${site.y}" r="${site.drawRadius}"></circle><rect class="site-core" x="${site.x - 15}" y="${site.y - 12}" width="30" height="24" rx="4"></rect><text class="site-label" x="${site.x}" y="${site.y + 4}">${label}</text></g>`;
+      }).join("");
+
+      const siteList = document.getElementById("site-list");
+      siteList.innerHTML = state.sites.length
+        ? state.sites.map(site => `<li><strong>${buildings[site.buildingId].name} Site</strong> · Owner: ${site.ownerId} · Sector: ${sectors[site.sectorId].name} · (${site.x.toFixed(1)}, ${site.y.toFixed(1)})</li>`).join("")
+        : "<li>아직 Site 없음</li>";
+      document.getElementById("event-log").innerHTML = state.events.map(event => `<li>${event}</li>`).join("");
+      renderGhost();
+    }
+
+    function snapshot() {
+      return {
+        owners: { ...state.owners },
+        balance: state.balance,
+        income: calculateIncome("Blue"),
+        selectedSectorId: state.selectedSectorId,
+        selectedBuildingId: state.selectedBuildingId,
+        ghost: state.ghost ? { ...state.ghost } : null,
+        sites: state.sites.map(site => ({ ...site })),
+        frontlines: deriveFrontlines().map(edgeLabel),
+        events: [...state.events]
+      };
+    }
+
+    if (typeof window !== "undefined") {
+      window.__freeConstructionPreview = {
+        resetState, selectSector, selectBuilding, moveGhostTo, attemptPlacementAt,
+        collectBlueIncome, captureSelectedSector, cancelPlacement, snapshot
+      };
+    }
+
+    if (typeof document !== "undefined") {
+      const battlefield = document.getElementById("battlefield");
+      function eventPoint(event) {
+        const bounds = battlefield.getBoundingClientRect();
+        return {
+          x: (event.clientX - bounds.left) * 900 / bounds.width,
+          y: (event.clientY - bounds.top) * 600 / bounds.height
+        };
+      }
+
+      battlefield.addEventListener("pointermove", event => {
+        if (state.selectedBuildingId) {
+          const point = eventPoint(event);
+          moveGhostTo(point.x, point.y);
+        }
+      });
+      battlefield.addEventListener("click", event => {
+        const anchor = event.target.closest("[data-anchor]");
+        if (anchor) {
+          selectSector(anchor.dataset.anchor);
+          return;
+        }
+        const point = eventPoint(event);
+        if (state.selectedBuildingId) attemptPlacementAt(point.x, point.y);
+        else {
+          const sectorId = resolveSector(point.x, point.y);
+          if (sectorId) selectSector(sectorId);
+        }
+      });
+      document.querySelectorAll("[data-anchor]").forEach(anchor => {
+        anchor.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectSector(anchor.dataset.anchor);
+          }
+        });
+      });
+      document.querySelectorAll("[data-building]").forEach(button => {
+        button.addEventListener("click", () => selectBuilding(button.dataset.building));
+      });
+      document.getElementById("collect-income").addEventListener("click", collectBlueIncome);
+      document.getElementById("capture-sector").addEventListener("click", captureSelectedSector);
+      document.getElementById("cancel-placement").addEventListener("click", cancelPlacement);
+      document.getElementById("reset-preview").addEventListener("click", resetState);
+    }
+
+    resetState();
+  </script>
+</body>
+</html>

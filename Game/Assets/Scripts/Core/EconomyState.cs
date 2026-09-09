@@ -26,6 +26,24 @@ namespace IronTrenches.Core
 
         public long Balance { get; private set; }
 
+        public bool CanAfford(long amount)
+        {
+            RequireNonNegativeAmount(amount);
+            return Balance >= amount;
+        }
+
+        public bool Spend(long amount)
+        {
+            RequireNonNegativeAmount(amount);
+            if (Balance < amount)
+            {
+                return false;
+            }
+
+            Balance = checked(Balance - amount);
+            return true;
+        }
+
         internal void AddIncome(long amount)
         {
             if (amount < 0)
@@ -34,6 +52,14 @@ namespace IronTrenches.Core
             }
 
             Balance = checked(Balance + amount);
+        }
+
+        private static void RequireNonNegativeAmount(long amount)
+        {
+            if (amount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(amount), "An economy amount cannot be negative.");
+            }
         }
     }
 }

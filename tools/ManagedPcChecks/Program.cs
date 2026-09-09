@@ -27,6 +27,25 @@ void ExpectThrows<TException>(Action action, string message)
     throw new InvalidOperationException(message);
 }
 
+void ExpectPlacementFailure(
+    BuildingPlacementResult result,
+    BuildingPlacementFailureReason expectedReason,
+    EconomyState economy,
+    long expectedBalance,
+    ICollection<ConstructionSite> sites,
+    int expectedSiteCount,
+    string context)
+{
+    Expect(!result.Success, $"{context}: placement unexpectedly succeeded.");
+    Expect(result.FailureReason == expectedReason, $"{context}: failure reason was incorrect.");
+    Expect(result.ConstructionSite == null, $"{context}: a failed placement returned a site.");
+    Expect(result.SpentAmount == 0, $"{context}: a failed placement reported spending.");
+    Expect(result.PreviousBalance == expectedBalance, $"{context}: previous balance was incorrect.");
+    Expect(result.NewBalance == expectedBalance, $"{context}: new balance was incorrect.");
+    Expect(economy.Balance == expectedBalance, $"{context}: economy balance changed.");
+    Expect(sites.Count == expectedSiteCount, $"{context}: construction site collection changed.");
+}
+
 var destination = new WorldPoint(12.5f, -4f);
 var move = new CommandOrder("squad-alpha", SquadCommandType.Move, destination);
 
@@ -456,4 +475,440 @@ ExpectThrows<OverflowException>(
     () => SectorIncomeCollector.Collect(economyTerritory, economyProfiles, overflowEconomy),
     "Economy balance overflow wrapped silently.");
 
+var spendingEconomy = new EconomyState("blue", 25);
+Expect(spendingEconomy.CanAfford(25), "Economy could not afford its exact balance.");
+Expect(!spendingEconomy.CanAfford(26), "Economy afforded more than its balance.");
+Expect(spendingEconomy.Spend(10), "Affordable spending failed.");
+Expect(spendingEconomy.Balance == 15, "Successful spending did not reduce balance.");
+Expect(!spendingEconomy.Spend(16), "Unaffordable spending succeeded.");
+Expect(spendingEconomy.Balance == 15, "Failed spending changed balance.");
+Expect(spendingEconomy.Spend(0), "Zero spending was not accepted.");
+Expect(spendingEconomy.Balance == 15, "Zero spending changed balance.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => spendingEconomy.CanAfford(-1),
+    "Negative affordability amount was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => spendingEconomy.Spend(-1),
+    "Negative spending amount was accepted.");
+
+var barracksDefinition = new BuildingDefinition("barracks", 50, 18f);
+var depotDefinition = new BuildingDefinition("depot", 35, 14f);
+Expect(barracksDefinition.BuildingTypeId == "barracks", "Building type id was not retained.");
+Expect(barracksDefinition.Cost == 50, "Building cost was not retained.");
+Expect(barracksDefinition.FootprintRadius == 18f, "Building footprint was not retained.");
+Expect(new BuildingDefinition("free-marker", 0, 1f).Cost == 0, "Zero-cost definition was rejected.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingDefinition(" ", 50, 18f),
+    "Blank building type id was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingDefinition("negative-cost", -1, 18f),
+    "Negative building cost was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingDefinition("zero-radius", 1, 0f),
+    "Zero footprint radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingDefinition("negative-radius", 1, -1f),
+    "Negative footprint radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingDefinition("nan-radius", 1, float.NaN),
+    "NaN footprint radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new BuildingDefinition("infinite-radius", 1, float.PositiveInfinity),
+    "Infinite footprint radius was accepted.");
+
+var placementPoint = new WorldPoint(37.3f, 42.8f);
+var placementRequest = new BuildingPlacementRequest(
+    "site-west-barracks",
+    "blue",
+    "construction-west",
+    "barracks",
+    placementPoint);
+Expect(placementRequest.SiteId == "site-west-barracks", "Placement request site id was not retained.");
+Expect(placementRequest.BuilderFactionId == "blue", "Placement request builder was not retained.");
+Expect(placementRequest.TargetSectorId == "construction-west", "Placement target sector was not retained.");
+Expect(placementRequest.BuildingTypeId == "barracks", "Placement building type was not retained.");
+Expect(placementRequest.Position.X == 37.3f && placementRequest.Position.Z == 42.8f, "Placement position was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingPlacementRequest("", "blue", "construction-west", "barracks", placementPoint),
+    "Blank placement site id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingPlacementRequest("site", "", "construction-west", "barracks", placementPoint),
+    "Blank placement builder id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingPlacementRequest("site", "blue", "", "barracks", placementPoint),
+    "Blank placement target sector id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new BuildingPlacementRequest("site", "blue", "construction-west", "", placementPoint),
+    "Blank placement building type id was accepted.");
+
+var directSite = new ConstructionSite(
+    "direct-site",
+    "depot",
+    "blue",
+    "construction-west",
+    new WorldPoint(17.3f, 42.8f),
+    14f);
+Expect(directSite.SiteId == "direct-site", "Construction site id was not retained.");
+Expect(directSite.BuildingTypeId == "depot", "Construction site building type was not retained.");
+Expect(directSite.OwnerId == "blue", "Construction site owner was not retained.");
+Expect(directSite.SectorId == "construction-west", "Construction site sector was not retained.");
+Expect(directSite.Position.X == 17.3f && directSite.Position.Z == 42.8f, "Construction site position was not retained.");
+Expect(directSite.FootprintRadius == 14f, "Construction site footprint was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new ConstructionSite("", "depot", "blue", "construction-west", placementPoint, 14f),
+    "Blank construction site id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new ConstructionSite("site", "", "blue", "construction-west", placementPoint, 14f),
+    "Blank construction site building type was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new ConstructionSite("site", "depot", "", "construction-west", placementPoint, 14f),
+    "Blank construction site owner was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new ConstructionSite("site", "depot", "blue", "", placementPoint, 14f),
+    "Blank construction site sector was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new ConstructionSite("site", "depot", "blue", "construction-west", new WorldPoint(float.NaN, 0f), 14f),
+    "Non-finite construction site position was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ConstructionSite("site", "depot", "blue", "construction-west", placementPoint, 0f),
+    "Invalid construction site footprint was accepted.");
+
+var constructionTopology = new SectorTopology();
+foreach (var sectorId in new[]
+{
+    "construction-west",
+    "construction-center",
+    "construction-east",
+    "construction-north",
+    "construction-south"
+})
+{
+    constructionTopology.RegisterSector(sectorId);
+}
+
+constructionTopology.AddBidirectionalAdjacency("construction-west", "construction-center");
+constructionTopology.AddBidirectionalAdjacency("construction-center", "construction-east");
+constructionTopology.AddBidirectionalAdjacency("construction-center", "construction-north");
+constructionTopology.AddBidirectionalAdjacency("construction-center", "construction-south");
+
+var constructionCenter = new SectorState("construction-center", "red");
+var constructionTerritory = new TerritoryGraph(
+    constructionTopology,
+    new[]
+    {
+        new SectorState("construction-west", "blue"),
+        constructionCenter,
+        new SectorState("construction-east", "red"),
+        new SectorState("construction-north", "red"),
+        new SectorState("construction-south", "blue")
+    },
+    new[]
+    {
+        new SectorControlAnchor("construction-anchor-west", "construction-west"),
+        new SectorControlAnchor("construction-anchor-center", "construction-center"),
+        new SectorControlAnchor("construction-anchor-east", "construction-east"),
+        new SectorControlAnchor("construction-anchor-north", "construction-north"),
+        new SectorControlAnchor("construction-anchor-south", "construction-south")
+    });
+var constructionProfiles = new[]
+{
+    new SectorIncomeProfile("construction-west", 40),
+    new SectorIncomeProfile("construction-center", 60),
+    new SectorIncomeProfile("construction-east", 50),
+    new SectorIncomeProfile("construction-north", 35),
+    new SectorIncomeProfile("construction-south", 25)
+};
+var constructionAreas = new RectangularSectorPlacementAreaResolver()
+    .Add("construction-west", 0f, 100f, 0f, 100f)
+    .Add("construction-center", 100f, 200f, 0f, 100f)
+    .Add("construction-east", 200f, 300f, 0f, 100f)
+    .Add("construction-north", 100f, 200f, 100f, 200f)
+    .Add("construction-south", 100f, 200f, -100f, 0f);
+var constructionEconomy = new EconomyState("blue", 0);
+var constructionSites = new List<ConstructionSite>();
+
+var constructionIncome = SectorIncomeCollector.Collect(
+    constructionTerritory,
+    constructionProfiles,
+    constructionEconomy);
+Expect(constructionIncome.CollectedAmount == 65, "Construction fixture initial income was not 65.");
+Expect(constructionEconomy.Balance == 65, "Construction fixture did not retain collected income.");
+
+var invalidTypeResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("invalid-type", "blue", "construction-west", "depot", placementPoint),
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    invalidTypeResult,
+    BuildingPlacementFailureReason.InvalidRequest,
+    constructionEconomy,
+    65,
+    constructionSites,
+    0,
+    "Mismatched building definition");
+
+var unknownSectorResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("unknown-sector", "blue", "construction-missing", "barracks", placementPoint),
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    unknownSectorResult,
+    BuildingPlacementFailureReason.UnknownSector,
+    constructionEconomy,
+    65,
+    constructionSites,
+    0,
+    "Unknown target sector");
+
+var enemySectorResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("enemy-center", "blue", "construction-center", "barracks", new WorldPoint(150f, 50f)),
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    enemySectorResult,
+    BuildingPlacementFailureReason.EnemyTerritory,
+    constructionEconomy,
+    65,
+    constructionSites,
+    0,
+    "Enemy territory");
+
+var outsideSelectedResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("outside-west", "blue", "construction-west", "barracks", new WorldPoint(150f, 50f)),
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    outsideSelectedResult,
+    BuildingPlacementFailureReason.OutsideTargetSector,
+    constructionEconomy,
+    65,
+    constructionSites,
+    0,
+    "Position in another sector");
+
+var boundaryResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("cross-west", "blue", "construction-west", "barracks", new WorldPoint(95f, 50f)),
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    boundaryResult,
+    BuildingPlacementFailureReason.FootprintCrossesSectorBoundary,
+    constructionEconomy,
+    65,
+    constructionSites,
+    0,
+    "Footprint crossing sector boundary");
+
+foreach (var invalidPoint in new[]
+{
+    new WorldPoint(float.NaN, 50f),
+    new WorldPoint(50f, float.PositiveInfinity),
+    new WorldPoint(float.NegativeInfinity, 50f)
+})
+{
+    var invalidPositionResult = BuildingPlacementService.Place(
+        new BuildingPlacementRequest("invalid-position-" + assertions, "blue", "construction-west", "barracks", invalidPoint),
+        barracksDefinition,
+        constructionEconomy,
+        constructionTerritory,
+        constructionAreas,
+        constructionSites);
+    ExpectPlacementFailure(
+        invalidPositionResult,
+        BuildingPlacementFailureReason.InvalidPosition,
+        constructionEconomy,
+        65,
+        constructionSites,
+        0,
+        "Non-finite placement position");
+}
+
+var firstPlacement = BuildingPlacementService.Place(
+    placementRequest,
+    barracksDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+Expect(firstPlacement.Success, "Valid free placement failed.");
+Expect(firstPlacement.FailureReason == BuildingPlacementFailureReason.None, "Successful placement reported a failure.");
+Expect(firstPlacement.ConstructionSite != null, "Successful placement did not return a site.");
+Expect(firstPlacement.ConstructionSite!.SectorId == "construction-west", "Placed site lost its target sector.");
+Expect(firstPlacement.ConstructionSite.OwnerId == "blue", "Placed site lost its owner.");
+Expect(firstPlacement.ConstructionSite.Position.X == 37.3f, "Placed site snapped away from its free X position.");
+Expect(firstPlacement.ConstructionSite.Position.Z == 42.8f, "Placed site snapped away from its free Z position.");
+Expect(firstPlacement.SpentAmount == 50, "Successful placement spent the wrong amount.");
+Expect(firstPlacement.PreviousBalance == 65 && firstPlacement.NewBalance == 15, "Placement balance result was incorrect.");
+Expect(constructionEconomy.Balance == 15, "Successful placement did not reduce economy balance to 15.");
+Expect(constructionSites.Count == 1, "Successful placement did not add exactly one site.");
+
+var occupiedResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("occupied-depot", "blue", "construction-west", "depot", new WorldPoint(50f, 45f)),
+    depotDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    occupiedResult,
+    BuildingPlacementFailureReason.Occupied,
+    constructionEconomy,
+    15,
+    constructionSites,
+    1,
+    "Overlapping footprint");
+
+var insufficientResult = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("insufficient-depot", "blue", "construction-west", "depot", new WorldPoint(75f, 75f)),
+    depotDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+ExpectPlacementFailure(
+    insufficientResult,
+    BuildingPlacementFailureReason.InsufficientFunds,
+    constructionEconomy,
+    15,
+    constructionSites,
+    1,
+    "Insufficient funds");
+
+var secondWestCollection = SectorIncomeCollector.Collect(
+    constructionTerritory,
+    constructionProfiles,
+    constructionEconomy);
+Expect(secondWestCollection.CollectedAmount == 65, "Second pre-capture construction income was not 65.");
+Expect(constructionEconomy.Balance == 80, "Second pre-capture collection balance was not 80.");
+
+var secondFreePlacement = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("site-west-depot", "blue", "construction-west", "depot", new WorldPoint(75f, 75f)),
+    depotDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+Expect(secondFreePlacement.Success, "Second free position in the same sector was rejected.");
+Expect(secondFreePlacement.ConstructionSite!.SectorId == "construction-west", "Second free site lost West ownership scope.");
+Expect(secondFreePlacement.ConstructionSite.Position.X == 75f, "Second free site did not retain its independent position.");
+Expect(constructionSites.Count == 2, "Second free placement did not add a site.");
+Expect(constructionEconomy.Balance == 45, "Second free placement did not spend 35.");
+
+var beforeConstructionCaptureFrontlines = constructionTerritory.GetFrontlines();
+Expect(
+    beforeConstructionCaptureFrontlines.Contains(new FrontlineEdge("construction-west", "construction-center")),
+    "Construction fixture initial West-Center frontline was missing.");
+var constructionCapture = constructionTerritory.CompleteAnchorCapture("construction-anchor-center", "blue");
+Expect(constructionCapture.Changed, "Construction fixture Center capture did not change ownership.");
+Expect(constructionCenter.OwnerId == "blue", "Construction fixture Center did not become Blue.");
+Expect(
+    !constructionTerritory.GetFrontlines().Contains(new FrontlineEdge("construction-west", "construction-center")),
+    "Construction fixture old West-Center frontline remained after capture.");
+Expect(
+    SectorIncomeResolver.Resolve(constructionTerritory, constructionProfiles, "blue") == 125,
+    "Construction fixture Center capture did not increase income to 125.");
+
+var postCaptureConstructionIncome = SectorIncomeCollector.Collect(
+    constructionTerritory,
+    constructionProfiles,
+    constructionEconomy);
+Expect(postCaptureConstructionIncome.CollectedAmount == 125, "Post-capture construction income was not 125.");
+Expect(constructionEconomy.Balance == 170, "Post-capture construction balance was not 170.");
+
+var centerPlacement = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("site-center-depot", "blue", "construction-center", "depot", new WorldPoint(150f, 50f)),
+    depotDefinition,
+    constructionEconomy,
+    constructionTerritory,
+    constructionAreas,
+    constructionSites);
+Expect(centerPlacement.Success, "Captured Center did not become a valid construction area.");
+Expect(centerPlacement.ConstructionSite!.SectorId == "construction-center", "Center site did not retain Center SectorId.");
+Expect(centerPlacement.ConstructionSite.OwnerId == "blue", "Center site did not retain Blue OwnerId.");
+Expect(constructionSites.Count == 3, "Center placement did not add exactly one site.");
+Expect(constructionEconomy.Balance == 135, "Center Depot did not spend 35 from the post-capture balance.");
+
+var zeroCostEconomy = new EconomyState("blue", 0);
+var zeroCostSites = new List<ConstructionSite>();
+var zeroCostPlacement = BuildingPlacementService.Place(
+    new BuildingPlacementRequest("zero-cost-site", "blue", "construction-west", "free-marker", new WorldPoint(10f, 10f)),
+    new BuildingDefinition("free-marker", 0, 5f),
+    zeroCostEconomy,
+    constructionTerritory,
+    constructionAreas,
+    zeroCostSites);
+Expect(zeroCostPlacement.Success, "Valid zero-cost placement failed.");
+Expect(zeroCostEconomy.Balance == 0, "Zero-cost placement changed balance.");
+Expect(zeroCostSites.Count == 1, "Zero-cost placement did not create a site.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
+
+sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver
+{
+    private readonly List<Area> areas = new();
+
+    public RectangularSectorPlacementAreaResolver Add(
+        string sectorId,
+        float minimumX,
+        float maximumX,
+        float minimumZ,
+        float maximumZ)
+    {
+        areas.Add(new Area(sectorId, minimumX, maximumX, minimumZ, maximumZ));
+        return this;
+    }
+
+    public string? ResolveSector(WorldPoint point)
+    {
+        foreach (var area in areas)
+        {
+            if (point.X >= area.MinimumX
+                && point.X <= area.MaximumX
+                && point.Z >= area.MinimumZ
+                && point.Z <= area.MaximumZ)
+            {
+                return area.SectorId;
+            }
+        }
+
+        return null;
+    }
+
+    public bool ContainsFootprint(string sectorId, WorldPoint center, float radius)
+    {
+        foreach (var area in areas)
+        {
+            if (area.SectorId == sectorId)
+            {
+                return center.X - radius >= area.MinimumX
+                    && center.X + radius <= area.MaximumX
+                    && center.Z - radius >= area.MinimumZ
+                    && center.Z + radius <= area.MaximumZ;
+            }
+        }
+
+        return false;
+    }
+
+    private readonly record struct Area(
+        string SectorId,
+        float MinimumX,
+        float MaximumX,
+        float MinimumZ,
+        float MaximumZ);
+}
