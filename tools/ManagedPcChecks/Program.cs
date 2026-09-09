@@ -1229,6 +1229,310 @@ Expect(
     lateMismatchedCenterBuilding.SectorId == "transfer-center",
     "Same-owner capture changed mismatched building SectorId.");
 
+var supplySourceDefinition = new SupplySourceDefinition(
+    "blue-rear",
+    "blue",
+    "supply-west");
+Expect(supplySourceDefinition.SourceId == "blue-rear", "Supply source id was not retained.");
+Expect(supplySourceDefinition.FactionId == "blue", "Supply source faction was not retained.");
+Expect(supplySourceDefinition.SectorId == "supply-west", "Supply source sector was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new SupplySourceDefinition(" ", "blue", "supply-west"),
+    "Blank supply source id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new SupplySourceDefinition("source", "", "supply-west"),
+    "Blank supply source faction was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new SupplySourceDefinition("source", "blue", ""),
+    "Blank supply source sector was accepted.");
+
+var supplyTopology = new SectorTopology();
+foreach (var sectorId in new[]
+{
+    "supply-west",
+    "supply-center",
+    "supply-east",
+    "supply-north",
+    "supply-south"
+})
+{
+    supplyTopology.RegisterSector(sectorId);
+}
+
+supplyTopology.AddBidirectionalAdjacency("supply-west", "supply-center");
+supplyTopology.AddBidirectionalAdjacency("supply-center", "supply-east");
+supplyTopology.AddBidirectionalAdjacency("supply-west", "supply-south");
+supplyTopology.AddBidirectionalAdjacency("supply-south", "supply-east");
+supplyTopology.AddBidirectionalAdjacency("supply-north", "supply-center");
+supplyTopology.AddBidirectionalAdjacency("supply-north", "supply-east");
+supplyTopology.AddBidirectionalAdjacency("supply-north", "supply-south");
+
+var supplyWest = new SectorState("supply-west", "blue");
+var supplyCenter = new SectorState("supply-center", "blue");
+var supplyEast = new SectorState("supply-east", "blue");
+var supplyNorth = new SectorState("supply-north", "red");
+var supplySouth = new SectorState("supply-south", "blue");
+var supplyTerritory = new TerritoryGraph(
+    supplyTopology,
+    new[] { supplyWest, supplyCenter, supplyEast, supplyNorth, supplySouth },
+    new[]
+    {
+        new SectorControlAnchor("supply-anchor-west", "supply-west"),
+        new SectorControlAnchor("supply-anchor-center", "supply-center"),
+        new SectorControlAnchor("supply-anchor-east", "supply-east"),
+        new SectorControlAnchor("supply-anchor-north", "supply-north"),
+        new SectorControlAnchor("supply-anchor-south", "supply-south")
+    });
+var redNorthSource = new SupplySourceDefinition("red-north", "red", "supply-north");
+var supplySources = new[] { supplySourceDefinition, redNorthSource };
+
+ExpectThrows<ArgumentNullException>(
+    () => StrategicSupplyResolver.Resolve(null!, "blue", supplySources),
+    "Null supply territory was accepted.");
+ExpectThrows<ArgumentException>(
+    () => StrategicSupplyResolver.Resolve(supplyTerritory, " ", supplySources),
+    "Blank supply faction was accepted.");
+ExpectThrows<ArgumentNullException>(
+    () => StrategicSupplyResolver.Resolve(supplyTerritory, "blue", null!),
+    "Null supply source collection was accepted.");
+ExpectThrows<ArgumentException>(
+    () => StrategicSupplyResolver.Resolve(
+        supplyTerritory,
+        "blue",
+        new SupplySourceDefinition[] { supplySourceDefinition, null! }),
+    "Null supply source item was accepted.");
+ExpectThrows<ArgumentException>(
+    () => StrategicSupplyResolver.Resolve(
+        supplyTerritory,
+        "blue",
+        new[]
+        {
+            supplySourceDefinition,
+            new SupplySourceDefinition("blue-rear", "red", "supply-north")
+        }),
+    "Duplicate supply source id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => StrategicSupplyResolver.Resolve(
+        supplyTerritory,
+        "blue",
+        new[] { new SupplySourceDefinition("outside-source", "blue", "supply-missing") }),
+    "Supply source in an unknown sector was accepted.");
+
+var initialSupplySnapshot = StrategicSupplyResolver.Resolve(
+    supplyTerritory,
+    "blue",
+    supplySources);
+Expect(initialSupplySnapshot.FactionId == "blue", "Supply snapshot lost its faction id.");
+Expect(initialSupplySnapshot.ActiveSupplySourceIds.Count == 1, "Initial active source count was not one.");
+Expect(initialSupplySnapshot.ActiveSupplySourceIds.Contains("blue-rear"), "Blue rear source was not active.");
+Expect(!initialSupplySnapshot.ActiveSupplySourceIds.Contains("red-north"), "Red source powered Blue supply.");
+Expect(initialSupplySnapshot.SuppliedSectorIds.Count == 4, "Initial supplied sector count was not four.");
+Expect(initialSupplySnapshot.CutOffSectorIds.Count == 0, "Initial snapshot contained cut-off sectors.");
+Expect(initialSupplySnapshot.GetStatus("supply-west") == SectorSupplyStatus.Supplied, "Source sector was not supplied.");
+Expect(initialSupplySnapshot.GetStatus("supply-center") == SectorSupplyStatus.Supplied, "Center was not initially supplied.");
+Expect(initialSupplySnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "South was not initially supplied.");
+Expect(initialSupplySnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "East was not initially supplied.");
+Expect(initialSupplySnapshot.GetStatus("supply-north") == SectorSupplyStatus.NotOwned, "Enemy North was reported cut off.");
+ExpectThrows<KeyNotFoundException>(
+    () => initialSupplySnapshot.GetStatus("supply-missing"),
+    "Unknown snapshot sector was accepted.");
+ExpectThrows<ArgumentException>(
+    () => initialSupplySnapshot.GetStatus(" "),
+    "Blank snapshot sector was accepted.");
+
+var supplyProfiles = new[]
+{
+    new SectorIncomeProfile("supply-west", 40),
+    new SectorIncomeProfile("supply-center", 60),
+    new SectorIncomeProfile("supply-east", 50),
+    new SectorIncomeProfile("supply-north", 35),
+    new SectorIncomeProfile("supply-south", 25)
+};
+Expect(
+    SectorIncomeResolver.Resolve(supplyTerritory, supplyProfiles, "blue") == 175,
+    "Initial supply fixture income was not 175.");
+var initialSupplyFrontlines = supplyTerritory.GetFrontlines();
+Expect(initialSupplyFrontlines.Count == 3, "Initial supply fixture frontline count was not three.");
+Expect(
+    initialSupplyFrontlines.Contains(new FrontlineEdge("supply-north", "supply-center")),
+    "Initial North-Center frontline was missing.");
+Expect(
+    initialSupplyFrontlines.Contains(new FrontlineEdge("supply-north", "supply-east")),
+    "Initial North-East frontline was missing.");
+Expect(
+    initialSupplyFrontlines.Contains(new FrontlineEdge("supply-north", "supply-south")),
+    "Initial North-South frontline was missing.");
+
+var frontDepot = new BuildingState(
+    "supply-front-depot",
+    "depot",
+    "blue",
+    "supply-east",
+    new WorldPoint(250f, 50f),
+    14f);
+var centerSupplyDepot = new BuildingState(
+    "supply-center-depot",
+    "depot",
+    "blue",
+    "supply-center",
+    new WorldPoint(150f, 50f),
+    14f);
+var southSupplyBarracks = new BuildingState(
+    "supply-south-barracks",
+    "barracks",
+    "blue",
+    "supply-south",
+    new WorldPoint(150f, -50f),
+    18f);
+var supplyBuildings = new List<BuildingState>
+{
+    frontDepot,
+    centerSupplyDepot,
+    southSupplyBarracks
+};
+Expect(
+    initialSupplySnapshot.GetStatus(frontDepot.SectorId) == SectorSupplyStatus.Supplied,
+    "Front Depot did not derive initial supply from East SectorId.");
+
+var redCenterCapture = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    supplyTerritory,
+    "supply-anchor-center",
+    "red",
+    supplyBuildings);
+Expect(redCenterCapture.CaptureChanged, "Red Center capture did not change territory ownership.");
+Expect(centerSupplyDepot.OwnerId == "red", "Center building transfer regressed during supply test.");
+Expect(frontDepot.OwnerId == "blue", "Center capture changed the East building owner.");
+Expect(
+    initialSupplySnapshot.GetStatus("supply-center") == SectorSupplyStatus.Supplied,
+    "Previously resolved snapshot was mutated after Center capture.");
+
+var alternateRouteSnapshot = StrategicSupplyResolver.Resolve(
+    supplyTerritory,
+    "blue",
+    supplySources);
+Expect(alternateRouteSnapshot.GetStatus("supply-center") == SectorSupplyStatus.NotOwned, "Captured Center was not NotOwned.");
+Expect(alternateRouteSnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "South alternate route was not supplied.");
+Expect(alternateRouteSnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "East lost supply while alternate route remained.");
+Expect(
+    alternateRouteSnapshot.GetStatus(frontDepot.SectorId) == SectorSupplyStatus.Supplied,
+    "Front Depot lost supply while South route remained.");
+Expect(
+    supplyTerritory.GetFrontlines().Contains(new FrontlineEdge("supply-west", "supply-center")),
+    "Center capture did not update the ownership-derived frontline.");
+Expect(
+    SectorIncomeResolver.Resolve(supplyTerritory, supplyProfiles, "blue") == 115,
+    "Center capture did not preserve ownership-based economy behavior.");
+
+var redSouthCapture = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    supplyTerritory,
+    "supply-anchor-south",
+    "red",
+    supplyBuildings);
+Expect(redSouthCapture.CaptureChanged, "Red South capture did not change territory ownership.");
+Expect(southSupplyBarracks.OwnerId == "red", "South building did not transfer to Red.");
+var cutOffSnapshot = StrategicSupplyResolver.Resolve(supplyTerritory, "blue", supplySources);
+Expect(cutOffSnapshot.GetStatus("supply-west") == SectorSupplyStatus.Supplied, "Rear source sector lost supply.");
+Expect(cutOffSnapshot.GetStatus("supply-south") == SectorSupplyStatus.NotOwned, "Captured South was not NotOwned.");
+Expect(cutOffSnapshot.GetStatus("supply-east") == SectorSupplyStatus.CutOff, "East was not cut off after both routes fell.");
+Expect(cutOffSnapshot.CutOffSectorIds.Count == 1, "Full route loss did not produce exactly one cut-off sector.");
+Expect(supplyEast.OwnerId == "blue", "Cut-off status changed East territory ownership.");
+Expect(frontDepot.OwnerId == "blue", "Cut-off status changed Front Depot ownership.");
+Expect(frontDepot.SectorId == "supply-east", "Cut-off status changed Front Depot SectorId.");
+Expect(
+    cutOffSnapshot.GetStatus(frontDepot.SectorId) == SectorSupplyStatus.CutOff,
+    "Front Depot did not derive cut-off status from East SectorId.");
+Expect(
+    alternateRouteSnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied,
+    "Earlier alternate-route snapshot was mutated by later capture.");
+Expect(
+    SectorIncomeResolver.Resolve(supplyTerritory, supplyProfiles, "blue") == 90,
+    "Cut-off East was incorrectly removed from ownership-based income.");
+
+var cutOffPlacementEconomy = new EconomyState("blue", 0);
+var cutOffPlacementSites = new List<ConstructionSite>();
+var cutOffPlacementAreas = new RectangularSectorPlacementAreaResolver()
+    .Add("supply-west", 0f, 100f, 0f, 100f)
+    .Add("supply-center", 100f, 200f, 0f, 100f)
+    .Add("supply-east", 200f, 300f, 0f, 100f)
+    .Add("supply-north", 100f, 200f, 100f, 200f)
+    .Add("supply-south", 100f, 200f, -100f, 0f);
+var cutOffPlacement = BuildingPlacementService.Place(
+    new BuildingPlacementRequest(
+        "supply-cutoff-site",
+        "blue",
+        "supply-east",
+        "supply-test-marker",
+        new WorldPoint(225f, 25f)),
+    new BuildingDefinition("supply-test-marker", 0, 5f),
+    cutOffPlacementEconomy,
+    supplyTerritory,
+    cutOffPlacementAreas,
+    cutOffPlacementSites);
+Expect(cutOffPlacement.Success, "Supply status was incorrectly added as a construction requirement.");
+Expect(cutOffPlacementSites.Count == 1, "Valid cut-off-sector placement did not create a site.");
+
+var blueSouthRecapture = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    supplyTerritory,
+    "supply-anchor-south",
+    "blue",
+    supplyBuildings);
+Expect(blueSouthRecapture.CaptureChanged, "Blue South recapture did not change ownership.");
+Expect(southSupplyBarracks.OwnerId == "blue", "South building did not return to Blue after recapture.");
+var restoredSupplySnapshot = StrategicSupplyResolver.Resolve(
+    supplyTerritory,
+    "blue",
+    supplySources);
+Expect(restoredSupplySnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "Recaptured South was not supplied.");
+Expect(restoredSupplySnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "East supply did not recover through South.");
+Expect(
+    restoredSupplySnapshot.GetStatus(frontDepot.SectorId) == SectorSupplyStatus.Supplied,
+    "Front Depot supply did not recover through its SectorId.");
+Expect(
+    cutOffSnapshot.GetStatus("supply-east") == SectorSupplyStatus.CutOff,
+    "Cut-off snapshot was mutated during supply restoration.");
+
+var redWestCapture = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    supplyTerritory,
+    "supply-anchor-west",
+    "red",
+    supplyBuildings);
+Expect(redWestCapture.CaptureChanged, "Source Sector capture did not change ownership.");
+var sourceLostSnapshot = StrategicSupplyResolver.Resolve(supplyTerritory, "blue", supplySources);
+Expect(sourceLostSnapshot.ActiveSupplySourceIds.Count == 0, "Lost source Sector remained active.");
+Expect(sourceLostSnapshot.GetStatus("supply-west") == SectorSupplyStatus.NotOwned, "Lost source Sector was not NotOwned.");
+Expect(sourceLostSnapshot.GetStatus("supply-south") == SectorSupplyStatus.CutOff, "South was not cut off after source loss.");
+Expect(sourceLostSnapshot.GetStatus("supply-east") == SectorSupplyStatus.CutOff, "East was not cut off after source loss.");
+Expect(sourceLostSnapshot.CutOffSectorIds.Count == 2, "Source loss did not cut off all remaining Blue sectors.");
+Expect(supplySourceDefinition.FactionId == "blue", "Source loss changed SupplySourceDefinition faction.");
+Expect(supplySourceDefinition.SectorId == "supply-west", "Source loss changed SupplySourceDefinition sector.");
+
+var backupSource = new SupplySourceDefinition("blue-front-backup", "blue", "supply-east");
+var multipleSourceSnapshot = StrategicSupplyResolver.Resolve(
+    supplyTerritory,
+    "blue",
+    new[] { supplySourceDefinition, backupSource, redNorthSource });
+Expect(multipleSourceSnapshot.ActiveSupplySourceIds.Count == 1, "Multiple-source active count was incorrect.");
+Expect(multipleSourceSnapshot.ActiveSupplySourceIds.Contains("blue-front-backup"), "Active backup source was not used.");
+Expect(!multipleSourceSnapshot.ActiveSupplySourceIds.Contains("blue-rear"), "Inactive rear source was reported active.");
+Expect(multipleSourceSnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "Backup source did not supply East.");
+Expect(multipleSourceSnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "Backup source did not reach South.");
+
+var noOwnedSectorSnapshot = StrategicSupplyResolver.Resolve(supplyTerritory, "green", supplySources);
+Expect(noOwnedSectorSnapshot.SuppliedSectorIds.Count == 0, "Faction with no territory had supplied sectors.");
+Expect(noOwnedSectorSnapshot.CutOffSectorIds.Count == 0, "Faction with no territory had cut-off sectors.");
+Expect(noOwnedSectorSnapshot.GetStatus("supply-east") == SectorSupplyStatus.NotOwned, "Foreign sector was not NotOwned.");
+
+var blueWestRecapture = supplyTerritory.CompleteAnchorCapture("supply-anchor-west", "blue");
+Expect(blueWestRecapture.Changed, "Blue did not recapture its rear source Sector.");
+var reactivatedSourceSnapshot = StrategicSupplyResolver.Resolve(
+    supplyTerritory,
+    "blue",
+    supplySources);
+Expect(reactivatedSourceSnapshot.ActiveSupplySourceIds.Contains("blue-rear"), "Recaptured rear source did not reactivate.");
+Expect(reactivatedSourceSnapshot.GetStatus("supply-west") == SectorSupplyStatus.Supplied, "Reactivated source Sector was not supplied.");
+Expect(reactivatedSourceSnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "Reactivated source did not reach South.");
+Expect(reactivatedSourceSnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "Reactivated source did not reach East.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver

@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — 전략 보급 연결</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #070b09;
+      color: #f3f0e0;
+      --blue: #58b8f0;
+      --blue-fill: #143b54;
+      --red: #e4776d;
+      --red-fill: #54241f;
+      --supply: #67e59b;
+      --cutoff: #ff9b55;
+      --frontline: #efca57;
+      --panel: rgba(16, 23, 18, 0.98);
+      --muted: #9ca89a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(215, 195, 120, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(215, 195, 120, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 50% 5%, #29352b 0, #101611 45%, #060907 88%);
+      background-size: 28px 28px, 28px 28px, auto;
+    }
+
+    button { font: inherit; }
+    main { width: min(1480px, calc(100% - 28px)); margin: 18px auto; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; gap: 22px; margin-bottom: 14px; }
+    .kicker { margin: 0 0 7px; color: #d9bc61; font-size: 0.72rem; font-weight: 900; letter-spacing: 0.13em; }
+    h1 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.7rem); }
+    header p:not(.kicker) { max-width: 780px; margin: 8px 0 0; color: #bac4b5; line-height: 1.55; }
+    .hud { display: grid; grid-template-columns: repeat(4, minmax(112px, 1fr)); gap: 8px; min-width: min(620px, 100%); }
+    .hud-card { padding: 11px 13px; border: 1px solid #465146; border-radius: 10px; background: #0f1611; }
+    .hud-card span { display: block; color: #879487; font-size: 0.64rem; font-weight: 850; letter-spacing: 0.07em; }
+    .hud-card strong { display: block; margin-top: 4px; color: #f4d777; font-size: 1.06rem; }
+    .hud-card strong.good { color: var(--supply); }
+    .hud-card strong.warn { color: var(--cutoff); }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; }
+    .map-panel, .side-panel { border: 1px solid #465047; border-radius: 15px; background: var(--panel); box-shadow: 0 22px 62px rgba(0, 0, 0, 0.36); }
+    .map-panel { padding: 13px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 15px; padding: 3px 3px 11px; color: #adb8aa; font-size: 0.76rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .sample { width: 30px; height: 0; border-top: 5px solid; border-radius: 9px; }
+    .sample.supply { border-color: var(--supply); }
+    .sample.frontline { border-color: var(--frontline); border-top-style: dashed; }
+    .sample.cutoff { width: 12px; height: 12px; border: 3px solid var(--cutoff); border-radius: 50%; }
+    #battlefield { display: block; width: 100%; min-height: 650px; border: 1px solid #303a32; border-radius: 11px; background: #0a100c; }
+    .connection-base { stroke: #39443c; stroke-width: 8; stroke-linecap: round; }
+    .supply-line { stroke: transparent; stroke-width: 7; stroke-linecap: round; pointer-events: none; }
+    .supply-line.active { stroke: var(--supply); filter: drop-shadow(0 0 7px rgba(103, 229, 155, 0.75)); }
+    .frontline { stroke: transparent; stroke-width: 13; stroke-dasharray: 9 11; stroke-linecap: round; pointer-events: none; }
+    .frontline.active { stroke: var(--frontline); filter: drop-shadow(0 0 6px rgba(239, 202, 87, 0.72)); }
+    .sector { cursor: pointer; }
+    .sector-node { stroke-width: 5; transition: stroke 140ms ease, filter 140ms ease; }
+    .sector.blue .sector-node { fill: var(--blue-fill); stroke: var(--blue); }
+    .sector.red .sector-node { fill: var(--red-fill); stroke: var(--red); }
+    .sector.cutoff .sector-node { stroke: var(--cutoff); stroke-width: 9; stroke-dasharray: 15 8; filter: drop-shadow(0 0 12px rgba(255, 155, 85, 0.8)); }
+    .sector.selected .sector-node { stroke: #fff2ad; filter: drop-shadow(0 0 12px rgba(255, 242, 173, 0.8)); }
+    .sector-name { fill: #fff8df; font-size: 24px; font-weight: 950; text-anchor: middle; pointer-events: none; }
+    .sector-owner, .sector-status { fill: #d8e0d5; font-size: 13px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+    .sector.cutoff .sector-status { fill: #ffd0a9; font-weight: 950; }
+    .anchor { fill: #111812; stroke: #ffe173; stroke-width: 4; cursor: pointer; }
+    .anchor-label { fill: #ffe998; font-size: 11px; font-weight: 950; text-anchor: middle; pointer-events: none; }
+    .source { cursor: pointer; }
+    .source-shape { fill: #173121; stroke: var(--supply); stroke-width: 5; }
+    .source.inactive .source-shape { fill: #292c29; stroke: #798079; stroke-dasharray: 8 6; }
+    .source-label, .building-label { fill: #fff7d6; font-size: 13px; font-weight: 950; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #080c09; stroke-width: 5px; }
+    .source-state, .building-state { fill: #d8dfd4; font-size: 10px; font-weight: 850; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: #080c09; stroke-width: 4px; }
+    .building { cursor: pointer; }
+    .building-shape { fill: #1d2921; stroke: var(--blue); stroke-width: 5; }
+    .building.cutoff .building-shape { stroke: var(--cutoff); stroke-width: 8; stroke-dasharray: 10 6; }
+    .selected-asset .source-shape, .selected-asset .building-shape { stroke: #fff2ad; filter: drop-shadow(0 0 12px #fff2ad); }
+    .map-note { margin: 10px 3px 1px; color: #a59b75; font-size: 0.73rem; line-height: 1.55; }
+    .side-panel { display: flex; flex-direction: column; gap: 10px; padding: 15px; }
+    .panel-box { padding: 13px; border: 1px solid #39443b; border-radius: 10px; background: #0a100c; }
+    .panel-box h2 { margin: 0 0 9px; color: #dce4d7; font-size: 0.92rem; }
+    .summary { color: #c0cabe; font-size: 0.79rem; line-height: 1.55; }
+    .summary strong { color: var(--supply); }
+    .actions { display: grid; gap: 8px; }
+    .action { padding: 11px; border: 1px solid #687469; border-radius: 8px; background: #303a2f; color: #f6f2e4; cursor: pointer; font-weight: 850; }
+    .action.red { border-color: #b65f58; background: #642c27; }
+    .action.blue { border-color: #58a8dc; background: #214f6d; }
+    .action.reset { background: #252c25; }
+    .action:hover:not(:disabled) { filter: brightness(1.14); }
+    .action:disabled { cursor: not-allowed; opacity: 0.4; }
+    .detail-grid { display: grid; grid-template-columns: 100px 1fr; gap: 6px; margin: 0; font-size: 0.76rem; }
+    .detail-grid dt { color: #8f9c90; }
+    .detail-grid dd { margin: 0; color: #e2e8dd; font-weight: 780; word-break: break-all; }
+    .route-readout { color: #b9e9ca; font-size: 0.75rem; font-weight: 800; line-height: 1.55; }
+    .event-log { min-height: 142px; max-height: 220px; margin: 0; padding-left: 22px; overflow: auto; color: #acb7ac; font-size: 0.73rem; line-height: 1.5; }
+    .event-log li + li { margin-top: 5px; }
+    footer { display: flex; justify-content: space-between; gap: 14px; margin-top: 10px; color: #7f8b80; font-size: 0.68rem; }
+    @media (max-width: 1100px) { header { align-items: flex-start; flex-direction: column; } .hud { min-width: 0; width: 100%; } .workspace { grid-template-columns: 1fr; } }
+    @media (max-width: 650px) { .hud { grid-template-columns: 1fr 1fr; } #battlefield { min-height: 500px; } footer { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">RTS-CORE-03A · 전략 보급 연결 시험</p>
+        <h1>후방 연결을 지키고 전방 고립을 확인하세요</h1>
+        <p>서부 후방 보급원에서 아군 지역을 따라 동부까지 이어지는 두 경로를 시험합니다. 한 경로가 끊겨도 우회로가 남으면 보급되며, 모든 경로가 끊기면 동부는 청군 소유인 채 고립됩니다.</p>
+      </div>
+      <div class="hud" aria-label="보급 시험 상태">
+        <div class="hud-card"><span>후방 보급원</span><strong id="source-state" class="good">가동</strong></div>
+        <div class="hud-card"><span>보급 연결 지역</span><strong id="supplied-count">4</strong></div>
+        <div class="hud-card"><span>고립 지역</span><strong id="cutoff-count">0</strong></div>
+        <div class="hud-card"><span>동부 전방</span><strong id="east-status" class="good">보급 연결</strong></div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <section class="map-panel" aria-label="전략 보급 연결 시험 지도">
+        <div class="legend">
+          <span><i class="sample supply"></i>현재 보급 연결</span>
+          <span><i class="sample frontline"></i>전선</span>
+          <span><i class="sample cutoff"></i>고립 경고</span>
+        </div>
+        <svg id="battlefield" viewBox="0 0 960 650" role="application" aria-label="다섯 지역 보급 연결 지도">
+          <g aria-hidden="true">
+            <line class="connection-base" x1="150" y1="330" x2="420" y2="245"></line>
+            <line class="connection-base" x1="420" y1="245" x2="790" y2="330"></line>
+            <line class="connection-base" x1="150" y1="330" x2="420" y2="500"></line>
+            <line class="connection-base" x1="420" y1="500" x2="790" y2="330"></line>
+            <line class="connection-base" x1="480" y1="80" x2="420" y2="245"></line>
+            <line class="connection-base" x1="480" y1="80" x2="790" y2="330"></line>
+            <line class="connection-base" x1="480" y1="80" x2="420" y2="500"></line>
+
+            <line class="supply-line" data-supply-edge="west|center" x1="150" y1="330" x2="420" y2="245"></line>
+            <line class="supply-line" data-supply-edge="center|east" x1="420" y1="245" x2="790" y2="330"></line>
+            <line class="supply-line" data-supply-edge="west|south" x1="150" y1="330" x2="420" y2="500"></line>
+            <line class="supply-line" data-supply-edge="south|east" x1="420" y1="500" x2="790" y2="330"></line>
+            <line class="supply-line" data-supply-edge="north|center" x1="480" y1="80" x2="420" y2="245"></line>
+            <line class="supply-line" data-supply-edge="north|east" x1="480" y1="80" x2="790" y2="330"></line>
+            <line class="supply-line" data-supply-edge="north|south" x1="480" y1="80" x2="420" y2="500"></line>
+
+            <line class="frontline" data-frontline-edge="west|center" x1="150" y1="330" x2="420" y2="245"></line>
+            <line class="frontline" data-frontline-edge="center|east" x1="420" y1="245" x2="790" y2="330"></line>
+            <line class="frontline" data-frontline-edge="west|south" x1="150" y1="330" x2="420" y2="500"></line>
+            <line class="frontline" data-frontline-edge="south|east" x1="420" y1="500" x2="790" y2="330"></line>
+            <line class="frontline" data-frontline-edge="north|center" x1="480" y1="80" x2="420" y2="245"></line>
+            <line class="frontline" data-frontline-edge="north|east" x1="480" y1="80" x2="790" y2="330"></line>
+            <line class="frontline" data-frontline-edge="north|south" x1="480" y1="80" x2="420" y2="500"></line>
+          </g>
+
+          <g class="sector" data-sector="north" transform="translate(480 80)">
+            <rect class="sector-node" x="-92" y="-55" width="184" height="110" rx="24"></rect>
+            <text class="sector-name" y="-14">북부</text><text class="sector-owner" y="12"></text><text class="sector-status" y="36"></text>
+          </g>
+          <g class="sector" data-sector="west" transform="translate(150 330)">
+            <rect class="sector-node" x="-105" y="-67" width="210" height="134" rx="25"></rect>
+            <text class="sector-name" y="-20">서부</text><text class="sector-owner" y="8"></text><text class="sector-status" y="34"></text>
+          </g>
+          <g class="sector" data-sector="center" transform="translate(420 245)">
+            <rect class="sector-node" x="-100" y="-62" width="200" height="124" rx="25"></rect>
+            <text class="sector-name" y="-17">중앙</text><text class="sector-owner" y="10"></text><text class="sector-status" y="36"></text>
+          </g>
+          <g class="sector" data-sector="south" transform="translate(420 500)">
+            <rect class="sector-node" x="-100" y="-62" width="200" height="124" rx="25"></rect>
+            <text class="sector-name" y="-17">남부</text><text class="sector-owner" y="10"></text><text class="sector-status" y="36"></text>
+          </g>
+          <g class="sector" data-sector="east" transform="translate(790 330)">
+            <rect class="sector-node" x="-112" y="-72" width="224" height="144" rx="27"></rect>
+            <text class="sector-name" y="-24">동부 전방</text><text class="sector-owner" y="5"></text><text class="sector-status" y="33"></text>
+          </g>
+
+          <g aria-label="지휘 거점">
+            <g data-anchor="north" transform="translate(480 143)"><path class="anchor" d="M0,-12 L12,0 L0,12 L-12,0 Z"></path><text class="anchor-label" y="4">북</text></g>
+            <g data-anchor="west" transform="translate(150 405)"><path class="anchor" d="M0,-12 L12,0 L0,12 L-12,0 Z"></path><text class="anchor-label" y="4">서</text></g>
+            <g data-anchor="center" transform="translate(420 315)"><path class="anchor" d="M0,-12 L12,0 L0,12 L-12,0 Z"></path><text class="anchor-label" y="4">중</text></g>
+            <g data-anchor="south" transform="translate(420 570)"><path class="anchor" d="M0,-12 L12,0 L0,12 L-12,0 Z"></path><text class="anchor-label" y="4">남</text></g>
+            <g data-anchor="east" transform="translate(790 410)"><path class="anchor" d="M0,-12 L12,0 L0,12 L-12,0 Z"></path><text class="anchor-label" y="4">동</text></g>
+          </g>
+
+          <g class="source" id="rear-source" data-asset="source" transform="translate(150 225)">
+            <path class="source-shape" d="M-48,28 L-48,-18 L0,-48 L48,-18 L48,28 Z"></path>
+            <text class="source-label" y="-4">후방 보급원</text><text class="source-state" y="17">가동</text>
+          </g>
+          <g class="building" id="front-depot" data-asset="building" transform="translate(790 205)">
+            <rect class="building-shape" x="-55" y="-34" width="110" height="68" rx="9"></rect>
+            <text class="building-label" y="-2">전방 보급창</text><text class="building-state" y="20">보급 연결</text>
+          </g>
+        </svg>
+        <p class="map-note">시험 경계: 인접한 아군 지역을 보급 통과 가능 연결로 사용합니다. 고립 상태만 계산하며 수입·건설·생산·전투 패널티는 아직 적용하지 않습니다.</p>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-box">
+          <h2>현재 전략 상황</h2>
+          <div class="summary" id="situation-summary"></div>
+        </section>
+
+        <section class="actions" aria-label="보급 경로 시험 조작">
+          <button class="action red" id="capture-center" type="button">적군이 중앙 점령 — 첫 경로 차단</button>
+          <button class="action red" id="capture-south" type="button" disabled>적군이 남부 점령 — 우회로 차단</button>
+          <button class="action blue" id="recapture-south" type="button" disabled>청군이 남부 재점령 — 보급 복구</button>
+          <button class="action reset" id="reset-preview" type="button">전체 초기화</button>
+        </section>
+
+        <section class="panel-box">
+          <h2>선택 상세</h2>
+          <dl class="detail-grid" id="selection-detail"><dt>안내</dt><dd>지역, 보급원 또는 전방 보급창을 선택하세요.</dd></dl>
+        </section>
+
+        <section class="panel-box">
+          <h2>현재 연결 판독</h2>
+          <div class="route-readout" id="route-readout"></div>
+        </section>
+
+        <section class="panel-box">
+          <h2>진행 기록</h2>
+          <ol class="event-log" id="event-log" aria-live="polite"></ol>
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <span>보급은 현재 소유권·인접 관계·보급원에서 매번 다시 계산</span>
+      <span>사람 확인용 한글 미리보기 · Unity 실행 화면과 기술 정본이 아님</span>
+    </footer>
+  </main>
+
+  <script>
+    const sectors = Object.freeze({
+      west: { name: "서부", income: 40, initialOwner: "Blue" },
+      center: { name: "중앙", income: 60, initialOwner: "Blue" },
+      east: { name: "동부", income: 50, initialOwner: "Blue" },
+      north: { name: "북부", income: 35, initialOwner: "Red" },
+      south: { name: "남부", income: 25, initialOwner: "Blue" }
+    });
+    const topology = Object.freeze([
+      ["west", "center"], ["center", "east"], ["west", "south"], ["south", "east"],
+      ["north", "center"], ["north", "east"], ["north", "south"]
+    ]);
+    const supplySource = Object.freeze({ sourceId: "blue-rear", factionId: "Blue", sectorId: "west" });
+    const frontDepot = Object.freeze({ buildingId: "front-depot", buildingTypeId: "depot", ownerId: "Blue", sectorId: "east" });
+    const state = { owners: {}, selected: null, events: [] };
+
+    function factionName(id) { return id === "Blue" ? "청군" : id === "Red" ? "적군" : id; }
+    function statusName(status) { return status === "Supplied" ? "보급 연결" : status === "CutOff" ? "보급 차단" : "비소유"; }
+    function edgeKey(first, second) { return [first, second].sort().join("|"); }
+    function edgeName(edge) { return `${sectors[edge[0]].name}–${sectors[edge[1]].name}`; }
+
+    function resolveSupply() {
+      const activeSource = state.owners[supplySource.sectorId] === supplySource.factionId;
+      const reached = new Set();
+      const queue = [];
+      if (activeSource) {
+        reached.add(supplySource.sectorId);
+        queue.push(supplySource.sectorId);
+      }
+      while (queue.length) {
+        const current = queue.shift();
+        for (const [first, second] of topology) {
+          const neighbor = first === current ? second : second === current ? first : null;
+          if (neighbor && state.owners[neighbor] === supplySource.factionId && !reached.has(neighbor)) {
+            reached.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+      const statuses = {};
+      for (const sectorId of Object.keys(sectors)) {
+        statuses[sectorId] = state.owners[sectorId] !== supplySource.factionId
+          ? "NotOwned"
+          : reached.has(sectorId) ? "Supplied" : "CutOff";
+      }
+      const supplyConnections = topology.filter(([first, second]) => reached.has(first) && reached.has(second));
+      return { activeSource, statuses, suppliedSectorIds: [...reached], supplyConnections };
+    }
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => state.owners[first] !== state.owners[second]);
+    }
+
+    function calculateBlueIncome() {
+      return Object.entries(sectors).reduce((total, [id, sector]) => total + (state.owners[id] === "Blue" ? sector.income : 0), 0);
+    }
+
+    function resetState() {
+      state.owners = Object.fromEntries(Object.entries(sectors).map(([id, sector]) => [id, sector.initialOwner]));
+      state.selected = null;
+      state.events = [
+        "동부 전방은 중앙 경로와 남부 우회 경로 모두로 보급 연결",
+        "서부의 청군 후방 보급원 가동"
+      ];
+      render();
+      return snapshot();
+    }
+
+    function captureSector(sectorId, newOwnerId) {
+      const previousOwnerId = state.owners[sectorId];
+      if (!previousOwnerId || previousOwnerId === newOwnerId) return { changed: false, sectorId };
+      state.owners[sectorId] = newOwnerId;
+      state.selected = { kind: "sector", id: sectorId };
+      return { changed: true, sectorId, previousOwnerId, newOwnerId };
+    }
+
+    function captureCenterByRed() {
+      const result = captureSector("center", "Red");
+      if (!result.changed) return result;
+      const supply = resolveSupply();
+      state.events.unshift("동부 보급 유지: 남부 우회 경로가 살아 있습니다");
+      state.events.unshift("서부–중앙–동부 경로 차단");
+      state.events.unshift("적군이 중앙 점령: 청군 → 적군");
+      if (supply.statuses.east !== "Supplied") throw new Error("남부 우회 경로가 보급을 유지하지 못했습니다");
+      render();
+      return { ...result, eastStatus: supply.statuses.east };
+    }
+
+    function captureSouthByRed() {
+      if (state.owners.center !== "Red") return { changed: false, reason: "중앙 경로를 먼저 차단하세요" };
+      const result = captureSector("south", "Red");
+      if (!result.changed) return result;
+      const supply = resolveSupply();
+      state.events.unshift("전방 보급창도 동부 지역을 통해 보급 차단 상태를 공유");
+      state.events.unshift("동부는 청군 소유를 유지하지만 모든 후방 연결이 끊겨 고립");
+      state.events.unshift("적군이 남부 점령: 남부 우회 경로 차단");
+      if (supply.statuses.east !== "CutOff") throw new Error("모든 경로 차단 뒤 동부가 고립되지 않았습니다");
+      render();
+      return { ...result, eastStatus: supply.statuses.east, eastOwnerId: state.owners.east };
+    }
+
+    function recaptureSouthByBlue() {
+      const result = captureSector("south", "Blue");
+      if (!result.changed) return result;
+      const supply = resolveSupply();
+      state.events.unshift("전방 보급창 보급 연결 복구");
+      state.events.unshift("서부–남부–동부 우회 경로 복구: 동부 고립 해제");
+      state.events.unshift("청군이 남부 재점령: 적군 → 청군");
+      if (supply.statuses.east !== "Supplied") throw new Error("남부 재점령 뒤 동부 보급이 복구되지 않았습니다");
+      render();
+      return { ...result, eastStatus: supply.statuses.east };
+    }
+
+    function select(kind, id) {
+      if (kind === "sector" && !sectors[id]) return false;
+      if (kind === "source" && id !== supplySource.sourceId) return false;
+      if (kind === "building" && id !== frontDepot.buildingId) return false;
+      state.selected = { kind, id };
+      render();
+      return true;
+    }
+
+    function snapshot() {
+      const supply = resolveSupply();
+      return {
+        owners: { ...state.owners },
+        source: { ...supplySource, active: supply.activeSource },
+        statuses: { ...supply.statuses },
+        suppliedSectorIds: [...supply.suppliedSectorIds],
+        cutOffSectorIds: Object.keys(sectors).filter(id => supply.statuses[id] === "CutOff"),
+        supplyConnections: supply.supplyConnections.map(edgeName),
+        frontlines: deriveFrontlines().map(edgeName),
+        building: { ...frontDepot, supplyStatus: supply.statuses[frontDepot.sectorId] },
+        blueIncome: calculateBlueIncome(),
+        events: [...state.events]
+      };
+    }
+
+    function renderSelection(supply) {
+      const detail = document.getElementById("selection-detail");
+      if (!state.selected) {
+        detail.innerHTML = "<dt>안내</dt><dd>지역, 보급원 또는 전방 보급창을 선택하세요.</dd>";
+        return;
+      }
+      if (state.selected.kind === "source") {
+        detail.innerHTML = `<dt>종류</dt><dd>후방 보급원</dd><dt>보급원 번호</dt><dd>${supplySource.sourceId}</dd><dt>진영</dt><dd>${factionName(supplySource.factionId)}</dd><dt>위치 지역</dt><dd>${sectors[supplySource.sectorId].name}</dd><dt>현재 상태</dt><dd>${supply.activeSource ? "가동" : "비가동"}</dd>`;
+        return;
+      }
+      if (state.selected.kind === "building") {
+        detail.innerHTML = `<dt>종류</dt><dd>전방 보급창</dd><dt>건물 번호</dt><dd>${frontDepot.buildingId}</dd><dt>소유</dt><dd>${factionName(frontDepot.ownerId)}</dd><dt>소속 지역</dt><dd>${sectors[frontDepot.sectorId].name}</dd><dt>보급 상태</dt><dd>${statusName(supply.statuses[frontDepot.sectorId])}</dd>`;
+        return;
+      }
+      const sectorId = state.selected.id;
+      detail.innerHTML = `<dt>종류</dt><dd>지역 / 지휘 거점</dd><dt>지역</dt><dd>${sectors[sectorId].name}</dd><dt>소유</dt><dd>${factionName(state.owners[sectorId])}</dd><dt>보급 상태</dt><dd>${statusName(supply.statuses[sectorId])}</dd><dt>시험 수입</dt><dd>${sectors[sectorId].income}</dd>`;
+    }
+
+    function render() {
+      if (typeof document === "undefined") return;
+      const supply = resolveSupply();
+      const frontlines = deriveFrontlines();
+      const supplyKeys = new Set(supply.supplyConnections.map(edge => edgeKey(...edge)));
+      const frontlineKeys = new Set(frontlines.map(edge => edgeKey(...edge)));
+
+      for (const sectorId of Object.keys(sectors)) {
+        const group = document.querySelector(`[data-sector="${sectorId}"]`);
+        const isSelected = state.selected && state.selected.kind === "sector" && state.selected.id === sectorId;
+        group.setAttribute("class", `sector ${state.owners[sectorId].toLowerCase()} ${supply.statuses[sectorId] === "CutOff" ? "cutoff" : ""} ${isSelected ? "selected" : ""}`);
+        group.querySelector(".sector-owner").textContent = `소유 ${factionName(state.owners[sectorId])}`;
+        group.querySelector(".sector-status").textContent = statusName(supply.statuses[sectorId]);
+      }
+      document.querySelectorAll("[data-supply-edge]").forEach(line => {
+        line.setAttribute("class", `supply-line${supplyKeys.has(edgeKey(...line.dataset.supplyEdge.split("|"))) ? " active" : ""}`);
+      });
+      document.querySelectorAll("[data-frontline-edge]").forEach(line => {
+        line.setAttribute("class", `frontline${frontlineKeys.has(edgeKey(...line.dataset.frontlineEdge.split("|"))) ? " active" : ""}`);
+      });
+
+      const source = document.getElementById("rear-source");
+      source.setAttribute("class", `source ${supply.activeSource ? "" : "inactive"} ${state.selected && state.selected.kind === "source" ? "selected-asset" : ""}`);
+      source.querySelector(".source-state").textContent = supply.activeSource ? "가동" : "비가동";
+      const depotStatus = supply.statuses[frontDepot.sectorId];
+      const depot = document.getElementById("front-depot");
+      depot.setAttribute("class", `building ${depotStatus === "CutOff" ? "cutoff" : ""} ${state.selected && state.selected.kind === "building" ? "selected-asset" : ""}`);
+      depot.querySelector(".building-state").textContent = statusName(depotStatus);
+
+      const cutOffIds = Object.keys(sectors).filter(id => supply.statuses[id] === "CutOff");
+      document.getElementById("source-state").textContent = supply.activeSource ? "가동" : "비가동";
+      document.getElementById("source-state").className = supply.activeSource ? "good" : "warn";
+      document.getElementById("supplied-count").textContent = supply.suppliedSectorIds.length;
+      document.getElementById("cutoff-count").textContent = cutOffIds.length;
+      document.getElementById("east-status").textContent = statusName(depotStatus);
+      document.getElementById("east-status").className = depotStatus === "Supplied" ? "good" : "warn";
+
+      const alternateAlive = supply.supplyConnections.some(edge => edgeKey(...edge) === edgeKey("west", "south"))
+        && supply.supplyConnections.some(edge => edgeKey(...edge) === edgeKey("south", "east"));
+      document.getElementById("situation-summary").innerHTML = depotStatus === "CutOff"
+        ? `동부는 <strong>청군 소유</strong>이지만 후방으로 이어지는 경로가 모두 끊겨 <span style="color:var(--cutoff);font-weight:900">고립</span>됐습니다. 소유권과 보급 상태는 서로 다릅니다.`
+        : state.owners.center === "Red"
+          ? `중앙 경로는 끊겼지만 ${alternateAlive ? "<strong>남부 우회 경로</strong>가 남아 동부 보급이 유지됩니다." : "우회 경로가 없습니다."}`
+          : `중앙 경로와 남부 우회 경로가 모두 살아 있습니다. 동부 전방은 <strong>보급 연결</strong> 상태입니다.`;
+
+      document.getElementById("route-readout").innerHTML = `<b>보급 연결:</b> ${supply.supplyConnections.map(edgeName).join(" · ") || "없음"}<br><b>전선:</b> ${frontlines.map(edgeName).join(" · ") || "없음"}<br><b>청군 시험 수입:</b> +${calculateBlueIncome()} — 고립 패널티 미적용`;
+      document.getElementById("capture-center").disabled = state.owners.center === "Red";
+      document.getElementById("capture-south").disabled = state.owners.center !== "Red" || state.owners.south === "Red";
+      document.getElementById("recapture-south").disabled = state.owners.south !== "Red";
+      document.getElementById("event-log").innerHTML = state.events.map(event => `<li>${event}</li>`).join("");
+      renderSelection(supply);
+    }
+
+    if (typeof window !== "undefined") {
+      window.__supplyConnectivityPreview = {
+        resetState,
+        captureCenterByRed,
+        captureSouthByRed,
+        recaptureSouthByBlue,
+        select,
+        snapshot
+      };
+    }
+
+    if (typeof document !== "undefined") {
+      document.getElementById("battlefield").addEventListener("click", event => {
+        const asset = event.target.closest("[data-asset]");
+        if (asset) {
+          select(asset.dataset.asset, asset.dataset.asset === "source" ? supplySource.sourceId : frontDepot.buildingId);
+          return;
+        }
+        const anchor = event.target.closest("[data-anchor]");
+        const sector = event.target.closest("[data-sector]");
+        if (anchor) select("sector", anchor.dataset.anchor);
+        else if (sector) select("sector", sector.dataset.sector);
+      });
+      document.getElementById("capture-center").addEventListener("click", captureCenterByRed);
+      document.getElementById("capture-south").addEventListener("click", captureSouthByRed);
+      document.getElementById("recapture-south").addEventListener("click", recaptureSouthByBlue);
+      document.getElementById("reset-preview").addEventListener("click", resetState);
+    }
+    resetState();
+  </script>
+</body>
+</html>

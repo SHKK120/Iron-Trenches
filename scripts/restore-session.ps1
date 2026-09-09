@@ -78,6 +78,7 @@ $requiredFiles = @(
     'previews/RTS_CORE_02A_Economy.html',
     'previews/RTS_CORE_02B_FreeConstruction.html',
     'previews/RTS_CORE_02C_ConstructionOwnership.html',
+    'previews/RTS_CORE_03A_SupplyConnectivity.html',
     'tools/ManagedPcChecks/ManagedPcChecks.csproj'
 )
 
