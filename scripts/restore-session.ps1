@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch]$Online
+    [switch]$Online,
+    [ValidateSet('ManagedPc', 'UnityIntegration')]
+    [string]$Mode = 'ManagedPc'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,6 +56,7 @@ function Invoke-GitInspection {
 
 $requiredFiles = @(
     'AGENTS.md',
+    'global.json',
     'docs/00_시작.md',
     'docs/01_환경복구.md',
     'docs/10_정체성.md',
@@ -68,10 +71,14 @@ $requiredFiles = @(
     'docs/40_구현순서.md',
     'docs/50_닫을것.md',
     'docs/60_나중에.md',
-    'docs/지시장부.md'
+    'docs/지시장부.md',
+    'Preview/README.md',
+    'Preview/index.html',
+    'tools/ManagedPcChecks/ManagedPcChecks.csproj'
 )
 
 Write-Host 'Iron & Trenches Recovery Check'
+Write-Host "Mode: $Mode"
 Write-Host ''
 
 $missingFiles = $requiredFiles | Where-Object {
@@ -83,6 +90,26 @@ if ($missingFiles) {
 }
 else {
     Write-CheckResult 'PASS' 'Foundation files' "$($requiredFiles.Count) required files found"
+}
+
+$dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
+$unityDotnetPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Data\DotNetSdk\dotnet.exe"
+if ($dotnetCommand -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $dotnetCommand.Source) 'sdk/8.0.318'))) {
+    Write-CheckResult 'PASS' 'Source-only .NET SDK' "8.0.318 — $($dotnetCommand.Source)"
+}
+elseif ((Test-Path -LiteralPath $unityDotnetPath) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $unityDotnetPath) 'sdk/8.0.318'))) {
+    Write-CheckResult 'PASS' 'Source-only .NET SDK' "$unityDotnetPath — verified managed-PC fallback"
+}
+else {
+    Write-CheckResult 'BLOCKED' 'Source-only .NET SDK' 'not found; use an approved official .NET 8 SDK installation path and do not install Unity only for this check'
+}
+
+$previewPath = Join-Path $repoRoot 'Preview/index.html'
+if (Test-Path -LiteralPath $previewPath) {
+    Write-CheckResult 'PASS' 'Browser Playable Preview' $previewPath
+}
+else {
+    Write-CheckResult 'FAIL' 'Browser Playable Preview' 'Preview/index.html missing'
 }
 
 $dashboardPath = Join-Path $repoRoot 'docs/40_구현순서.md'
@@ -183,7 +210,10 @@ else {
 
 $unityHubPath = 'C:\Program Files\Unity Hub\Unity Hub.exe'
 $unityHubVersionPath = 'C:\Program Files\Unity Hub\version'
-if (Test-Path -LiteralPath $unityHubPath) {
+if ($Mode -eq 'ManagedPc') {
+    Write-CheckResult 'SKIP' 'Unity Hub' 'not required in ManagedPc mode; use Source-Only C# and Browser Preview'
+}
+elseif (Test-Path -LiteralPath $unityHubPath) {
     $hubVersion = if (Test-Path -LiteralPath $unityHubVersionPath) {
         (Get-Content -Raw -LiteralPath $unityHubVersionPath).Trim()
     }
@@ -197,7 +227,10 @@ else {
 }
 
 $unityEditorPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Unity.exe"
-if (Test-Path -LiteralPath $unityEditorPath) {
+if ($Mode -eq 'ManagedPc') {
+    Write-CheckResult 'SKIP' 'Unity Editor' 'not required in ManagedPc mode'
+}
+elseif (Test-Path -LiteralPath $unityEditorPath) {
     Write-CheckResult 'PASS' 'Unity Editor' "$expectedUnityVersion — $unityEditorPath"
 }
 else {
@@ -210,7 +243,10 @@ foreach ($module in @(
     @{ Name = 'Windows Standalone Support'; Path = $windowsSupportPath },
     @{ Name = 'WebGL Build Support'; Path = $webGlSupportPath }
 )) {
-    if (Test-Path -LiteralPath $module.Path) {
+    if ($Mode -eq 'ManagedPc') {
+        Write-CheckResult 'SKIP' $module.Name 'not required in ManagedPc mode'
+    }
+    elseif (Test-Path -LiteralPath $module.Path) {
         Write-CheckResult 'PASS' $module.Name $module.Path
     }
     else {
@@ -219,7 +255,10 @@ foreach ($module in @(
 }
 
 $visualStudioPath = 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\devenv.exe'
-if (Test-Path -LiteralPath $visualStudioPath) {
+if ($Mode -eq 'ManagedPc') {
+    Write-CheckResult 'SKIP' 'Visual Studio Community' 'not required in ManagedPc mode'
+}
+elseif (Test-Path -LiteralPath $visualStudioPath) {
     Write-CheckResult 'PASS' 'Visual Studio Community' $visualStudioPath
 
     $instanceRoot = 'C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances'
@@ -256,7 +295,10 @@ $runtimeFiles = @(
     'C:\Windows\SysWOW64\msvcp140.dll'
 )
 $missingRuntimeFiles = $runtimeFiles | Where-Object { -not (Test-Path -LiteralPath $_) }
-if ($missingRuntimeFiles) {
+if ($Mode -eq 'ManagedPc') {
+    Write-CheckResult 'SKIP' 'Visual C++ runtime files' 'Unity toolchain prerequisite not required in ManagedPc mode'
+}
+elseif ($missingRuntimeFiles) {
     Write-CheckResult 'FAIL' 'Visual C++ runtime files' "missing: $($missingRuntimeFiles -join ', ')"
 }
 else {

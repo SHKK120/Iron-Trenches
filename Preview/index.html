@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — Browser Playable Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111711;
+      color: #edf0df;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(131, 112, 62, 0.2), transparent 34rem),
+        linear-gradient(145deg, #151b14, #0a0e0c 70%);
+    }
+
+    main {
+      width: min(960px, calc(100% - 32px));
+      padding: 32px;
+      border: 1px solid #4d5744;
+      border-radius: 18px;
+      background: rgba(19, 25, 19, 0.96);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+    }
+
+    h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 4vw, 2.6rem); }
+    p { color: #bfc7af; }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #d6b864;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .battlefield {
+      display: grid;
+      grid-template-columns: 1fr 60px 1fr 60px 1fr;
+      align-items: center;
+      margin: 32px 0 24px;
+    }
+
+    .sector {
+      min-height: 180px;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 10px;
+      padding: 22px;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .sector.blue { border-color: #5aa8e8; background: rgba(40, 111, 165, 0.22); }
+    .sector.red { border-color: #df6c62; background: rgba(155, 52, 44, 0.23); }
+    .sector.changed { transform: translateY(-5px); }
+
+    .sector-name { font-size: 1.3rem; font-weight: 800; }
+    .owner { color: #dbe2ce; font-size: 0.92rem; }
+
+    .connection {
+      height: 5px;
+      border-radius: 999px;
+      background: #515b4a;
+      transition: background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .connection.frontline {
+      background: #f1bf43;
+      box-shadow: 0 0 18px rgba(241, 191, 67, 0.8);
+    }
+
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: #0c110d;
+    }
+
+    #frontline-summary { color: #f2d98b; font-weight: 800; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+    button {
+      padding: 11px 16px;
+      border: 1px solid #67745c;
+      border-radius: 8px;
+      background: #303a2c;
+      color: #f3f5e9;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    button:hover { background: #3d4937; }
+    button:disabled { cursor: default; opacity: 0.45; }
+    button.primary { border-color: #d6b864; background: #695a2b; }
+
+    .note { margin-bottom: 0; font-size: 0.86rem; }
+
+    @media (max-width: 680px) {
+      main { padding: 22px; }
+      .battlefield { grid-template-columns: 1fr; gap: 10px; }
+      .connection { width: 5px; height: 34px; justify-self: center; }
+      .sector { min-height: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Source-Only Rule Mirror</p>
+    <h1>Capture + Frontline Preview</h1>
+    <p>Center 점령 완료가 현재 소유권에서 파생되는 전선을 어떻게 이동시키는지 확인합니다.</p>
+
+    <section class="battlefield" aria-label="3개 구역 전선">
+      <article class="sector" id="sector-west" data-sector="west">
+        <span class="sector-name">West</span>
+        <span class="owner"></span>
+      </article>
+      <div class="connection" id="edge-west-center" aria-label="West-Center 연결"></div>
+      <article class="sector" id="sector-center" data-sector="center">
+        <span class="sector-name">Center</span>
+        <span class="owner"></span>
+      </article>
+      <div class="connection" id="edge-center-east" aria-label="Center-East 연결"></div>
+      <article class="sector" id="sector-east" data-sector="east">
+        <span class="sector-name">East</span>
+        <span class="owner"></span>
+      </article>
+    </section>
+
+    <div class="status" aria-live="polite">
+      <span>현재 전선</span>
+      <span id="frontline-summary"></span>
+    </div>
+
+    <div class="controls">
+      <button class="primary" id="capture-center" type="button">Blue가 Center 점령 완료</button>
+      <button id="reset-preview" type="button">초기화</button>
+    </div>
+
+    <p class="note">이 Preview는 브라우저 상호작용 검증용이며 Unity 통합 완료를 의미하지 않습니다.</p>
+  </main>
+
+  <script>
+    const initialOwners = Object.freeze({ west: "Blue", center: "Red", east: "Red" });
+    const owners = { ...initialOwners };
+    const topology = [
+      ["west", "center"],
+      ["center", "east"]
+    ];
+
+    const displayName = sectorId => sectorId[0].toUpperCase() + sectorId.slice(1);
+    const edgeId = (first, second) => `edge-${first}-${second}`;
+
+    function deriveFrontlines() {
+      return topology.filter(([first, second]) => owners[first] !== owners[second]);
+    }
+
+    function render(changedSector = null) {
+      for (const [sectorId, owner] of Object.entries(owners)) {
+        const element = document.querySelector(`[data-sector="${sectorId}"]`);
+        element.className = `sector ${owner.toLowerCase()}${changedSector === sectorId ? " changed" : ""}`;
+        element.querySelector(".owner").textContent = `Owner: ${owner}`;
+      }
+
+      document.querySelectorAll(".connection").forEach(element => element.classList.remove("frontline"));
+      const frontlines = deriveFrontlines();
+      frontlines.forEach(([first, second]) => {
+        document.getElementById(edgeId(first, second)).classList.add("frontline");
+      });
+
+      document.getElementById("frontline-summary").textContent = frontlines.length
+        ? frontlines.map(([first, second]) => `${displayName(first)}–${displayName(second)}`).join(", ")
+        : "없음";
+      document.getElementById("capture-center").disabled = owners.center === "Blue";
+    }
+
+    document.getElementById("capture-center").addEventListener("click", () => {
+      owners.center = "Blue";
+      render("center");
+    });
+
+    document.getElementById("reset-preview").addEventListener("click", () => {
+      Object.assign(owners, initialOwners);
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
