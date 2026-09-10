@@ -74,6 +74,7 @@ $requiredFiles = @(
     'docs/지시장부.md',
     'previews/README.md',
     'previews/index.html',
+    'previews/RTS_CORE_03B_TerrainRoadReinforcement.html',
     'previews/RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html',
     'previews/RTS_PLAYTEST_03A_SupplyStrategy.html',
     'previews/RTS_CORE_01C_Territory.html',
@@ -101,10 +102,15 @@ else {
 
 $sourceDotnetPath = $null
 $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
+$standaloneDotnetPath = Join-Path $env:USERPROFILE '.dotnet-sdk-8.0.318\dotnet.exe'
 $unityDotnetPath = "C:\Program Files\Unity\Hub\Editor\$expectedUnityVersion\Editor\Data\DotNetSdk\dotnet.exe"
 if ($dotnetCommand -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $dotnetCommand.Source) 'sdk/8.0.318'))) {
     $sourceDotnetPath = $dotnetCommand.Source
     Write-CheckResult 'PASS' 'Source-only .NET SDK' "8.0.318 — $($dotnetCommand.Source)"
+}
+elseif ((Test-Path -LiteralPath $standaloneDotnetPath) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $standaloneDotnetPath) 'sdk/8.0.318'))) {
+    $sourceDotnetPath = $standaloneDotnetPath
+    Write-CheckResult 'PASS' 'Source-only .NET SDK' "$standaloneDotnetPath — approved official standalone SDK"
 }
 elseif ((Test-Path -LiteralPath $unityDotnetPath) -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $unityDotnetPath) 'sdk/8.0.318'))) {
     $sourceDotnetPath = $unityDotnetPath

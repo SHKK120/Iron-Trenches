@@ -1533,6 +1533,394 @@ Expect(reactivatedSourceSnapshot.GetStatus("supply-west") == SectorSupplyStatus.
 Expect(reactivatedSourceSnapshot.GetStatus("supply-south") == SectorSupplyStatus.Supplied, "Reactivated source did not reach South.");
 Expect(reactivatedSourceSnapshot.GetStatus("supply-east") == SectorSupplyStatus.Supplied, "Reactivated source did not reach East.");
 
+// RTS-CORE-03B: Terrain movement profiles remain data-driven trial inputs.
+var openMovement = new TerrainMovementProfile("Open", 1f);
+var forestMovement = new TerrainMovementProfile("Forest", 0.7f);
+var rockyMovement = new TerrainMovementProfile("Rocky", 0.8f);
+var mudMovement = new TerrainMovementProfile("Mud", 0.6f);
+Expect(openMovement.TerrainId == "Open", "Terrain id was not retained.");
+Expect(openMovement.MovementMultiplier == 1f, "Open movement multiplier was not retained.");
+Expect(forestMovement.MovementMultiplier == 0.7f, "Forest trial multiplier was not retained.");
+Expect(rockyMovement.MovementMultiplier == 0.8f, "Rocky trial multiplier was not retained.");
+Expect(mudMovement.MovementMultiplier == 0.6f, "Mud trial multiplier was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new TerrainMovementProfile(" ", 1f),
+    "Blank terrain id was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new TerrainMovementProfile("Zero", 0f),
+    "Zero terrain multiplier was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new TerrainMovementProfile("Negative", -1f),
+    "Negative terrain multiplier was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new TerrainMovementProfile("NaN", float.NaN),
+    "NaN terrain multiplier was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new TerrainMovementProfile("Infinity", float.PositiveInfinity),
+    "Infinite terrain multiplier was accepted.");
+
+var terrainMovementResolver = new RectangularTerrainMovementResolver(openMovement)
+    .Add(forestMovement, 0f, 100f, -20f, 20f)
+    .Add(rockyMovement, 0f, 20f, 30f, 50f)
+    .Add(mudMovement, 30f, 50f, 30f, 50f);
+Expect(terrainMovementResolver.Resolve(new WorldPoint(25f, 10f)).TerrainId == "Forest", "Forest terrain did not resolve.");
+Expect(terrainMovementResolver.Resolve(new WorldPoint(10f, 40f)).TerrainId == "Rocky", "Rocky terrain did not resolve.");
+Expect(terrainMovementResolver.Resolve(new WorldPoint(40f, 40f)).TerrainId == "Mud", "Mud terrain did not resolve.");
+Expect(terrainMovementResolver.Resolve(new WorldPoint(200f, 0f)).TerrainId == "Open", "Open fallback terrain did not resolve.");
+
+var arbitraryRoadStart = new WorldPoint(14.2f, 31.7f);
+var arbitraryRoadEnd = new WorldPoint(63.4f, 48.1f);
+var arbitraryRoad = new RoadSegment(
+    "road-arbitrary",
+    arbitraryRoadStart,
+    arbitraryRoadEnd,
+    4.5f,
+    new[] { "road-west", "road-center" });
+Expect(arbitraryRoad.RoadSegmentId == "road-arbitrary", "Road id was not retained.");
+Expect(arbitraryRoad.Start.X == 14.2f && arbitraryRoad.Start.Z == 31.7f, "Free road start was not retained.");
+Expect(arbitraryRoad.End.X == 63.4f && arbitraryRoad.End.Z == 48.1f, "Free road end was not retained.");
+Expect(arbitraryRoad.Width == 4.5f, "Road width was not retained.");
+Expect(arbitraryRoad.TraversedSectorIds.Count == 2, "Multi-sector ids were not retained.");
+Expect(arbitraryRoad.Length > 50f, "Road length was not derived from free endpoints.");
+ExpectThrows<ArgumentException>(
+    () => new RoadSegment(" ", arbitraryRoadStart, arbitraryRoadEnd, 4f, new[] { "road-west" }),
+    "Blank road id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RoadSegment("road-same", arbitraryRoadStart, arbitraryRoadStart, 4f, new[] { "road-west" }),
+    "Identical road endpoints were accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RoadSegment("road-invalid-point", new WorldPoint(float.NaN, 0f), arbitraryRoadEnd, 4f, new[] { "road-west" }),
+    "Invalid road point was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoadSegment("road-zero-width", arbitraryRoadStart, arbitraryRoadEnd, 0f, new[] { "road-west" }),
+    "Zero road width was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoadSegment("road-negative-width", arbitraryRoadStart, arbitraryRoadEnd, -1f, new[] { "road-west" }),
+    "Negative road width was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RoadSegment("road-duplicate-sector", arbitraryRoadStart, arbitraryRoadEnd, 4f, new[] { "road-west", "road-west" }),
+    "Duplicate traversed sector id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RoadSegment("road-empty-sector", arbitraryRoadStart, arbitraryRoadEnd, 4f, Array.Empty<string>()),
+    "Road without traversed sectors was accepted.");
+
+var roadTopology = new SectorTopology();
+roadTopology.RegisterSector("road-west");
+roadTopology.RegisterSector("road-center");
+roadTopology.RegisterSector("road-east");
+roadTopology.AddBidirectionalAdjacency("road-west", "road-center");
+roadTopology.AddBidirectionalAdjacency("road-center", "road-east");
+var roadWest = new SectorState("road-west", "blue");
+var roadCenter = new SectorState("road-center", "blue");
+var roadEast = new SectorState("road-east", "red");
+var roadTerritory = new TerritoryGraph(
+    roadTopology,
+    new[] { roadWest, roadCenter, roadEast },
+    new[]
+    {
+        new SectorControlAnchor("road-anchor-west", "road-west"),
+        new SectorControlAnchor("road-anchor-center", "road-center"),
+        new SectorControlAnchor("road-anchor-east", "road-east")
+    });
+var roadPlacementAreas = new ConfigurableRoadPlacementAreaResolver();
+var placedRoads = new RoadNetwork();
+roadPlacementAreas.Set("road-west");
+var singleSectorPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-free-one", "blue", new WorldPoint(14.2f, 31.7f), new WorldPoint(63.4f, 48.1f), 4f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(singleSectorPlacement.Success, "Owned-sector free road placement failed.");
+Expect(singleSectorPlacement.RoadSegment != null, "Successful road placement returned no segment.");
+Expect(placedRoads.Segments.Count == 1, "Successful road placement did not mutate the network once.");
+
+roadPlacementAreas.Set("road-west", "road-center");
+var multiSectorPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-free-multi", "blue", new WorldPoint(63.4f, 48.1f), new WorldPoint(92.6f, 17.3f), 5f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(multiSectorPlacement.Success, "Owned multi-sector road placement failed.");
+Expect(multiSectorPlacement.RoadSegment!.TraversedSectorIds.Count == 2, "Placed road lost traversed sectors.");
+Expect(placedRoads.GetConnectedSegments("road-free-one").Count == 1, "Dynamic endpoint junction did not connect roads.");
+
+var placementCountBeforeFailure = placedRoads.Segments.Count;
+roadPlacementAreas.Set("road-center", "road-east");
+var enemyRoadPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-enemy", "blue", new WorldPoint(92.6f, 17.3f), new WorldPoint(120f, 15f), 4f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(!enemyRoadPlacement.Success, "Enemy-sector road placement succeeded.");
+Expect(enemyRoadPlacement.FailureReason == RoadPlacementFailureReason.EnemyTerritory, "Enemy road failure reason was incorrect.");
+Expect(placedRoads.Segments.Count == placementCountBeforeFailure, "Failed enemy road placement mutated the network.");
+
+roadPlacementAreas.Set("road-unknown");
+var unknownRoadPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-unknown", "blue", new WorldPoint(1f, 1f), new WorldPoint(3f, 3f), 2f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(!unknownRoadPlacement.Success, "Unknown-sector road placement succeeded.");
+Expect(unknownRoadPlacement.FailureReason == RoadPlacementFailureReason.UnknownSector, "Unknown road failure reason was incorrect.");
+Expect(placedRoads.Segments.Count == placementCountBeforeFailure, "Unknown-sector road placement mutated the network.");
+
+roadPlacementAreas.Set("road-west");
+var duplicateRoadPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-free-one", "blue", new WorldPoint(1f, 2f), new WorldPoint(3f, 4f), 2f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(!duplicateRoadPlacement.Success, "Duplicate road id placement succeeded.");
+Expect(duplicateRoadPlacement.FailureReason == RoadPlacementFailureReason.DuplicateRoadSegmentId, "Duplicate road failure reason was incorrect.");
+Expect(placedRoads.Segments.Count == placementCountBeforeFailure, "Duplicate road placement mutated the network.");
+
+roadPlacementAreas.Set();
+var noAreaRoadPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-no-area", "blue", new WorldPoint(2f, 2f), new WorldPoint(8f, 8f), 2f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(!noAreaRoadPlacement.Success, "Road without traversed sectors succeeded.");
+Expect(noAreaRoadPlacement.FailureReason == RoadPlacementFailureReason.NoTraversedSectors, "No-area road failure reason was incorrect.");
+Expect(placedRoads.Segments.Count == placementCountBeforeFailure, "No-area road placement mutated the network.");
+
+roadPlacementAreas.Set("road-west");
+var invalidRoadPlacement = RoadPlacementService.Place(
+    new RoadPlacementRequest("road-invalid", "blue", new WorldPoint(5f, 5f), new WorldPoint(5f, 5f), 2f),
+    roadTerritory,
+    roadPlacementAreas,
+    placedRoads);
+Expect(!invalidRoadPlacement.Success, "Zero-length road placement succeeded.");
+Expect(invalidRoadPlacement.FailureReason == RoadPlacementFailureReason.InvalidGeometry, "Invalid road geometry reason was incorrect.");
+Expect(placedRoads.Segments.Count == placementCountBeforeFailure, "Invalid road placement mutated the network.");
+
+var routeRear = new WorldPoint(0f, 0f);
+var routeJunction = new WorldPoint(50f, 0f);
+var routeFront = new WorldPoint(100f, 0f);
+var routeNorth = new WorldPoint(0f, 50f);
+var routeNorthEast = new WorldPoint(100f, 50f);
+var reinforcementRoads = new RoadNetwork();
+reinforcementRoads.Register(new RoadSegment("route-main-a", routeRear, routeJunction, 4f, new[] { "transit-rear", "transit-middle" }));
+reinforcementRoads.Register(new RoadSegment("route-main-b", routeJunction, routeFront, 4f, new[] { "transit-middle", "transit-front" }));
+reinforcementRoads.Register(new RoadSegment("route-alt-a", routeRear, routeNorth, 4f, new[] { "transit-rear", "transit-middle" }));
+reinforcementRoads.Register(new RoadSegment("route-alt-b", routeNorth, routeNorthEast, 4f, new[] { "transit-middle" }));
+reinforcementRoads.Register(new RoadSegment("route-alt-c", routeNorthEast, routeFront, 4f, new[] { "transit-middle", "transit-front" }));
+Expect(reinforcementRoads.TryFindPath(routeRear, routeFront, out var shortestRoadPath), "Connected road path was not found.");
+Expect(shortestRoadPath.Count == 2, "Road network did not choose the shorter connected path.");
+Expect(shortestRoadPath[0].RoadSegmentId == "route-main-a", "Road path did not start on the main route.");
+Expect(reinforcementRoads.IsPointOnRoad(new WorldPoint(25f, 0f)), "Road center was not detected.");
+Expect(!reinforcementRoads.IsPointOnRoad(new WorldPoint(25f, 10f)), "Point outside road width was detected as road.");
+
+var alternateOnlyRoads = new RoadNetwork();
+alternateOnlyRoads.Register(new RoadSegment("route-alt-a", routeRear, routeNorth, 4f, new[] { "transit-rear", "transit-middle" }));
+alternateOnlyRoads.Register(new RoadSegment("route-alt-b", routeNorth, routeNorthEast, 4f, new[] { "transit-middle" }));
+alternateOnlyRoads.Register(new RoadSegment("route-alt-c", routeNorthEast, routeFront, 4f, new[] { "transit-middle", "transit-front" }));
+Expect(alternateOnlyRoads.TryFindPath(routeRear, routeFront, out var alternateRoadPath), "Alternate road route was not found.");
+Expect(alternateRoadPath.Count == 3, "Alternate route segment count was incorrect.");
+
+var trialRoadMovement = new RoadMovementProfile(1.4f);
+var openOffroadSpeed = MovementSpeedResolver.Resolve(10f, new WorldPoint(200f, 0f), terrainMovementResolver, reinforcementRoads, trialRoadMovement);
+var forestOffroadSpeed = MovementSpeedResolver.Resolve(10f, new WorldPoint(25f, 10f), terrainMovementResolver, reinforcementRoads, trialRoadMovement);
+var rockyOffroadSpeed = MovementSpeedResolver.Resolve(10f, new WorldPoint(10f, 40f), terrainMovementResolver, reinforcementRoads, trialRoadMovement);
+var mudOffroadSpeed = MovementSpeedResolver.Resolve(10f, new WorldPoint(40f, 40f), terrainMovementResolver, reinforcementRoads, trialRoadMovement);
+var roadOverForestSpeed = MovementSpeedResolver.Resolve(10f, new WorldPoint(25f, 0f), terrainMovementResolver, reinforcementRoads, trialRoadMovement);
+Expect(openOffroadSpeed.FinalSpeed == 10f && !openOffroadSpeed.IsOnRoad, "Open offroad speed was incorrect.");
+Expect(forestOffroadSpeed.FinalSpeed == 7f && forestOffroadSpeed.Terrain.TerrainId == "Forest", "Forest offroad speed was incorrect.");
+Expect(rockyOffroadSpeed.FinalSpeed == 8f && rockyOffroadSpeed.Terrain.TerrainId == "Rocky", "Rocky offroad speed was incorrect.");
+Expect(mudOffroadSpeed.FinalSpeed == 6f && mudOffroadSpeed.Terrain.TerrainId == "Mud", "Mud offroad speed was incorrect.");
+Expect(roadOverForestSpeed.IsOnRoad, "Road over Forest was not detected as road.");
+Expect(roadOverForestSpeed.FinalSpeed == 14f, "Road speed did not override underlying Forest movement.");
+Expect(roadOverForestSpeed.MovementMultiplier == 1.4f, "Road and Forest multipliers were incorrectly combined.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoadMovementProfile(0f),
+    "Zero road movement multiplier was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => MovementSpeedResolver.Resolve(0f, routeRear, terrainMovementResolver, reinforcementRoads, trialRoadMovement),
+    "Zero base movement speed was accepted.");
+
+var transitTopology = new SectorTopology();
+transitTopology.RegisterSector("transit-rear");
+transitTopology.RegisterSector("transit-middle");
+transitTopology.RegisterSector("transit-front");
+transitTopology.AddBidirectionalAdjacency("transit-rear", "transit-middle");
+transitTopology.AddBidirectionalAdjacency("transit-middle", "transit-front");
+var transitRearSector = new SectorState("transit-rear", "blue");
+var transitMiddleSector = new SectorState("transit-middle", "blue");
+var transitFrontSector = new SectorState("transit-front", "blue");
+var transitTerritory = new TerritoryGraph(
+    transitTopology,
+    new[] { transitRearSector, transitMiddleSector, transitFrontSector },
+    new[]
+    {
+        new SectorControlAnchor("transit-anchor-rear", "transit-rear"),
+        new SectorControlAnchor("transit-anchor-middle", "transit-middle"),
+        new SectorControlAnchor("transit-anchor-front", "transit-front")
+    });
+var transitSource = new SupplySourceDefinition("transit-source", "blue", "transit-rear");
+var suppliedTransitSnapshot = StrategicSupplyResolver.Resolve(transitTerritory, "blue", new[] { transitSource });
+var roadRoutePlanner = new ReinforcementRoutePlanner(reinforcementRoads, trialRoadMovement, terrainMovementResolver);
+var activeTransits = new List<ReinforcementTransit>();
+var roadDispatchRequest = new ReinforcementDispatchRequest(
+    "reinforcement-road",
+    "blue",
+    "transit-rear",
+    routeRear,
+    "transit-front",
+    routeFront,
+    10f);
+var roadDispatch = ReinforcementDispatchService.Dispatch(
+    roadDispatchRequest,
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(roadDispatch.Success, "Supplied road reinforcement dispatch failed.");
+Expect(roadDispatch.Transit != null, "Successful dispatch returned no transit.");
+var roadTransit = roadDispatch.Transit!;
+Expect(roadTransit.State == ReinforcementState.EnRoute, "Dispatch did not begin EnRoute.");
+Expect(roadTransit.Route.Legs.Count == 2, "Road dispatch route leg count was incorrect.");
+Expect(roadTransit.Route.Legs.All(leg => leg.Surface == ReinforcementRouteSurface.Road), "Road-preferred dispatch used offroad legs.");
+Expect(roadTransit.Route.TotalDistance == 100f, "Road route total distance was incorrect.");
+Expect(roadTransit.Route.EstimateTravelTime(10f) < 8f, "Road route trial travel time was not accelerated.");
+roadTransit.Advance(1f);
+Expect(roadTransit.State == ReinforcementState.EnRoute, "Partial road advance arrived too early.");
+Expect(roadTransit.DistanceTravelled == 14f, "Explicit road advance distance was incorrect.");
+Expect(roadTransit.CurrentPosition.X == 14f, "Road transit world position did not advance.");
+roadTransit.Advance(10f);
+Expect(roadTransit.State == ReinforcementState.Arrived, "Completed road route did not arrive.");
+Expect(roadTransit.CurrentPosition.X == routeFront.X, "Arrived reinforcement was not at the destination.");
+ExpectThrows<InvalidOperationException>(
+    () => roadTransit.MarkDestroyedEnRoute(),
+    "Arrived reinforcement was destroyed en route.");
+
+var noRoadNetwork = new RoadNetwork();
+var forestOnlyResolver = new RectangularTerrainMovementResolver(forestMovement);
+var offroadPlanner = new ReinforcementRoutePlanner(noRoadNetwork, trialRoadMovement, forestOnlyResolver);
+var offroadRequest = new ReinforcementDispatchRequest(
+    "reinforcement-offroad",
+    "blue",
+    "transit-rear",
+    routeRear,
+    "transit-front",
+    routeFront,
+    10f);
+var offroadDispatch = ReinforcementDispatchService.Dispatch(
+    offroadRequest,
+    transitTerritory,
+    suppliedTransitSnapshot,
+    offroadPlanner,
+    activeTransits);
+Expect(offroadDispatch.Success, "Supplied offroad fallback dispatch failed.");
+var offroadTransit = offroadDispatch.Transit!;
+Expect(offroadTransit.Route.Legs.Count == 1, "Offroad fallback did not produce one direct leg.");
+Expect(offroadTransit.Route.Legs[0].Surface == ReinforcementRouteSurface.Offroad, "Offroad fallback used a road leg.");
+Expect(offroadTransit.Route.Legs[0].MovementMultiplier == 0.7f, "Offroad route did not use terrain movement.");
+roadTransit = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-road-speed", "blue", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits).Transit!;
+roadTransit.Advance(8f);
+offroadTransit.Advance(8f);
+Expect(roadTransit.State == ReinforcementState.Arrived, "Road transit did not beat slow offroad transit.");
+Expect(offroadTransit.State == ReinforcementState.EnRoute, "Slow offroad transit arrived as quickly as road transit.");
+
+var interceptedDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-intercepted", "blue", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+var interceptedTransit = interceptedDispatch.Transit!;
+interceptedTransit.Advance(1f);
+var interceptedPosition = interceptedTransit.CurrentPosition;
+interceptedTransit.MarkDestroyedEnRoute();
+Expect(interceptedTransit.State == ReinforcementState.DestroyedEnRoute, "En-route destruction state was not retained.");
+interceptedTransit.Advance(100f);
+Expect(interceptedTransit.State == ReinforcementState.DestroyedEnRoute, "Destroyed transit later arrived.");
+Expect(interceptedTransit.CurrentPosition.X == interceptedPosition.X, "Destroyed transit continued moving.");
+Expect(suppliedTransitSnapshot.GetStatus("transit-front") == SectorSupplyStatus.Supplied, "Physical interdiction changed strategic supply.");
+
+var duplicateDispatchCount = activeTransits.Count;
+var duplicateDispatch = ReinforcementDispatchService.Dispatch(
+    roadDispatchRequest,
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(!duplicateDispatch.Success, "Duplicate reinforcement id dispatch succeeded.");
+Expect(duplicateDispatch.FailureReason == ReinforcementDispatchFailureReason.DuplicateReinforcementId, "Duplicate reinforcement failure reason was incorrect.");
+Expect(activeTransits.Count == duplicateDispatchCount, "Failed duplicate dispatch mutated transit collection.");
+
+var unknownSourceDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-unknown-source", "blue", "missing", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(unknownSourceDispatch.FailureReason == ReinforcementDispatchFailureReason.UnknownSourceSector, "Unknown source dispatch reason was incorrect.");
+var unknownDestinationDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-unknown-destination", "blue", "transit-rear", routeRear, "missing", routeFront, 10f),
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(unknownDestinationDispatch.FailureReason == ReinforcementDispatchFailureReason.UnknownDestinationSector, "Unknown destination dispatch reason was incorrect.");
+var factionMismatchDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-red", "red", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    suppliedTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(factionMismatchDispatch.FailureReason == ReinforcementDispatchFailureReason.FactionMismatch, "Faction mismatch dispatch reason was incorrect.");
+
+transitMiddleSector.TransferOwnershipTo("red");
+var transitCutOffSnapshot = StrategicSupplyResolver.Resolve(transitTerritory, "blue", new[] { transitSource });
+Expect(transitCutOffSnapshot.GetStatus("transit-front") == SectorSupplyStatus.CutOff, "Corridor loss did not cut off transit destination.");
+var activeBeforeCutOffDispatch = activeTransits.Count;
+var cutOffDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-cutoff", "blue", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    transitCutOffSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(!cutOffDispatch.Success, "Cut-off destination accepted a new dispatch.");
+Expect(cutOffDispatch.FailureReason == ReinforcementDispatchFailureReason.DestinationCutOff, "Cut-off dispatch failure reason was incorrect.");
+Expect(activeTransits.Count == activeBeforeCutOffDispatch, "Cut-off dispatch mutated transit collection.");
+Expect(offroadTransit.State == ReinforcementState.EnRoute, "CutOff automatically deleted an existing in-flight reinforcement.");
+
+var sourceNotSuppliedDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-source-cutoff", "blue", "transit-front", routeFront, "transit-rear", routeRear, 10f),
+    transitTerritory,
+    transitCutOffSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(sourceNotSuppliedDispatch.FailureReason == ReinforcementDispatchFailureReason.SourceNotSupplied, "Cut-off source dispatch reason was incorrect.");
+
+transitFrontSector.TransferOwnershipTo("red");
+var transitNotOwnedSnapshot = StrategicSupplyResolver.Resolve(transitTerritory, "blue", new[] { transitSource });
+var notOwnedDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-not-owned", "blue", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    transitNotOwnedSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(notOwnedDispatch.FailureReason == ReinforcementDispatchFailureReason.DestinationNotOwned, "Not-owned destination dispatch reason was incorrect.");
+
+transitMiddleSector.TransferOwnershipTo("blue");
+transitFrontSector.TransferOwnershipTo("blue");
+var restoredTransitSnapshot = StrategicSupplyResolver.Resolve(transitTerritory, "blue", new[] { transitSource });
+var restoredDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest("reinforcement-restored", "blue", "transit-rear", routeRear, "transit-front", routeFront, 10f),
+    transitTerritory,
+    restoredTransitSnapshot,
+    roadRoutePlanner,
+    activeTransits);
+Expect(restoredDispatch.Success, "Restored strategic route did not allow a new dispatch.");
+Expect(restoredDispatch.Transit!.State == ReinforcementState.EnRoute, "Restored dispatch did not begin physical transit.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver
@@ -1588,4 +1976,67 @@ sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolv
         float MaximumX,
         float MinimumZ,
         float MaximumZ);
+}
+
+sealed class RectangularTerrainMovementResolver : ITerrainMovementResolver
+{
+    private readonly TerrainMovementProfile fallback;
+    private readonly List<Area> areas = new();
+
+    public RectangularTerrainMovementResolver(TerrainMovementProfile fallback)
+    {
+        this.fallback = fallback;
+    }
+
+    public RectangularTerrainMovementResolver Add(
+        TerrainMovementProfile profile,
+        float minimumX,
+        float maximumX,
+        float minimumZ,
+        float maximumZ)
+    {
+        areas.Add(new Area(profile, minimumX, maximumX, minimumZ, maximumZ));
+        return this;
+    }
+
+    public TerrainMovementProfile Resolve(WorldPoint point)
+    {
+        foreach (var area in areas)
+        {
+            if (point.X >= area.MinimumX
+                && point.X <= area.MaximumX
+                && point.Z >= area.MinimumZ
+                && point.Z <= area.MaximumZ)
+            {
+                return area.Profile;
+            }
+        }
+
+        return fallback;
+    }
+
+    private readonly record struct Area(
+        TerrainMovementProfile Profile,
+        float MinimumX,
+        float MaximumX,
+        float MinimumZ,
+        float MaximumZ);
+}
+
+sealed class ConfigurableRoadPlacementAreaResolver : IRoadPlacementAreaResolver
+{
+    private IReadOnlyCollection<string> sectorIds = Array.Empty<string>();
+
+    public void Set(params string[] traversedSectorIds)
+    {
+        sectorIds = Array.AsReadOnly((string[])traversedSectorIds.Clone());
+    }
+
+    public IReadOnlyCollection<string> ResolveTraversedSectors(
+        WorldPoint start,
+        WorldPoint end,
+        float width)
+    {
+        return sectorIds;
+    }
 }
