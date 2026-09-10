@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>기술 연구 기반 프리뷰</title>
+  <style>
+    :root { color-scheme: dark; font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif; background: #090b0a; color: #f4eedb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -12%, #3c3d31, #151914 47%, #080a08 84%); }
+    main { width: min(1240px, calc(100% - 28px)); margin: 22px auto 38px; }
+    header { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: end; margin-bottom: 14px; }
+    .kicker { margin: 0 0 6px; color: #e1c66b; font-size: .76rem; font-weight: 900; letter-spacing: .14em; }
+    h1 { margin: 0; font-size: clamp(1.85rem, 4vw, 3.2rem); line-height: 1.08; }
+    .lead { max-width: 870px; margin: 10px 0 0; color: #bec6b8; line-height: 1.6; }
+    .badge { padding: 8px 11px; border: 1px solid #806e3a; border-radius: 999px; background: #352f1d; color: #f5dc87; font-size: .74rem; font-weight: 900; white-space: nowrap; }
+    .notice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .notice { margin: 0; padding: 11px 13px; border: 1px solid #836f38; border-radius: 9px; background: rgba(78, 61, 25, .3); color: #ecd99b; font-size: .78rem; font-weight: 750; line-height: 1.5; }
+    .notice.effect { border-color: #536c59; background: rgba(38, 66, 46, .3); color: #c2d7c4; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(310px, .72fr); gap: 14px; }
+    .panel { border: 1px solid #40483e; border-radius: 14px; background: rgba(16, 21, 17, .96); box-shadow: 0 18px 52px rgba(0, 0, 0, .25); overflow: hidden; }
+    .tree { padding: 22px; }
+    .tree-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 18px; }
+    .tree-title h2 { margin: 0; font-size: 1.05rem; }
+    .tree-title span { color: #8e998c; font-size: .72rem; }
+    .tech-tree { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "a a" "b c" "d d"; gap: 34px 14px; position: relative; }
+    .tech-tree::before { content: ""; position: absolute; left: 25%; right: 25%; top: 30%; height: 37%; border: solid #5e675c; border-width: 1px 1px 0; pointer-events: none; }
+    .tech-card { position: relative; z-index: 1; padding: 15px; border: 1px solid #525b50; border-radius: 11px; background: #171d18; transition: .18s ease; }
+    .tech-card[data-area="a"] { grid-area: a; width: min(380px, 100%); justify-self: center; }
+    .tech-card[data-area="b"] { grid-area: b; }
+    .tech-card[data-area="c"] { grid-area: c; }
+    .tech-card[data-area="d"] { grid-area: d; width: min(440px, 100%); justify-self: center; }
+    .tech-card.locked { opacity: .62; border-color: #3d443d; }
+    .tech-card.available { border-color: #a88d45; box-shadow: 0 0 0 1px rgba(197, 164, 71, .14); }
+    .tech-card.active { border-color: #4f92a8; box-shadow: 0 0 0 1px rgba(79, 146, 168, .2); }
+    .tech-card.completed { border-color: #4e865d; background: #17271b; }
+    .tech-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .tech-name { margin: 0; font-size: .98rem; }
+    .status { padding: 4px 7px; border-radius: 999px; background: #30372f; color: #bbc3b7; font-size: .66rem; font-weight: 900; white-space: nowrap; }
+    .available .status { background: #594a20; color: #ffe69b; }
+    .active .status { background: #204f61; color: #d3f4ff; }
+    .completed .status { background: #265632; color: #d5f7dc; }
+    .tech-meta { display: flex; flex-wrap: wrap; gap: 7px 12px; margin: 10px 0 8px; color: #b4bcae; font-size: .73rem; }
+    .requirement { min-height: 34px; margin: 0 0 10px; color: #8f9a8d; font-size: .71rem; line-height: 1.45; }
+    .tech-card button { width: 100%; min-height: 38px; }
+    .sidebar { display: grid; gap: 14px; align-content: start; }
+    .section { padding: 16px; }
+    .section h2 { margin: 0 0 12px; font-size: 1rem; }
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .status-card { min-height: 68px; padding: 10px; border: 1px solid #343b34; border-radius: 9px; background: #0b0f0c; }
+    .status-card span { display: block; color: #879285; font-size: .68rem; font-weight: 850; }
+    .status-card strong { display: block; margin-top: 5px; color: #eee6ce; font-size: .84rem; line-height: 1.35; }
+    .progress-track { height: 10px; margin-top: 9px; overflow: hidden; border: 1px solid #4c554c; border-radius: 999px; background: #090c09; }
+    .progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #4f8ea5, #8ed4df); transition: width .2s ease; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button { min-height: 42px; padding: 9px 10px; border: 1px solid #687166; border-radius: 8px; background: #293229; color: #f7f2e3; font: inherit; font-size: .74rem; font-weight: 850; cursor: pointer; }
+    button:hover, button:focus-visible { border-color: #e2c664; background: #3a4639; outline: none; }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    button.complete { border-color: #4d8295; background: #244857; }
+    .log { max-height: 164px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+    .log li { padding: 7px 0; border-bottom: 1px solid #293029; color: #b4bcae; font-size: .74rem; line-height: 1.4; }
+    .log li:first-child { color: #f1d98b; }
+    .checklist { grid-column: 1 / -1; padding: 18px; }
+    .checklist h2 { margin: 0 0 12px; font-size: 1rem; }
+    .checklist ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin: 0; padding-left: 21px; color: #bac2b5; font-size: .81rem; line-height: 1.5; }
+    footer { margin-top: 14px; color: #7b8578; font-size: .72rem; text-align: center; }
+    @media (max-width: 880px) { header, .layout { grid-template-columns: 1fr; } .badge { justify-self: start; } .checklist ul { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .notice-grid, .status-grid, .controls, .tech-tree { grid-template-columns: 1fr; } .tech-tree { grid-template-areas: "a" "b" "c" "d"; gap: 12px; } .tech-tree::before { display: none; } .tech-card[data-area] { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">기술 연구 기반 · 기술 프리뷰</p>
+        <h1>기술 연구 기반</h1>
+        <p class="lead">시험용 자원을 지불해 연구를 시작하고, 명시적으로 시간을 진행해 완료하면 분기 기술과 합류 기술이 순서대로 해금됩니다.</p>
+      </div>
+      <div class="badge">사람 확인 대기</div>
+    </header>
+
+    <div class="notice-grid">
+      <p class="notice">현재 기술 이름, 비용, 연구 시간과 트리 구조는 시스템 검증용 시험값이며 최종 기술트리가 아닙니다.</p>
+      <p class="notice effect">이번 프리뷰는 연구 진행과 선행 조건만 검증합니다. 연구 완료에 따른 실제 유닛·건물 능력치 효과는 아직 적용되지 않습니다.</p>
+    </div>
+
+    <section class="layout">
+      <section class="panel tree">
+        <div class="tree-title"><h2>시험 기술 트리</h2><span>진영당 동시 연구 1개 · 시험 구조</span></div>
+        <div id="tree" class="tech-tree" aria-label="기초 군수에서 두 갈래로 분기한 뒤 전선 운영으로 합류하는 시험 기술 트리"></div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="panel section">
+          <h2>연구 현황</h2>
+          <div class="status-grid">
+            <div class="status-card"><span>시험용 자원</span><strong id="resource">400</strong></div>
+            <div class="status-card"><span>현재 연구</span><strong id="activeResearch">없음</strong></div>
+            <div class="status-card"><span>연구 진행도</span><strong id="progressText">0 / 0초</strong><div class="progress-track"><div id="progressBar" class="progress-fill"></div></div></div>
+            <div class="status-card"><span>완료한 연구</span><strong id="completedCount">0개</strong></div>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <h2>시간과 시험 조작</h2>
+          <div class="controls">
+            <button id="advanceOne">1초 진행</button>
+            <button id="advanceFive">5초 진행</button>
+            <button id="advanceComplete" class="complete">연구 완료까지 진행</button>
+            <button id="concurrentTest">다른 연구 동시 시작 시험</button>
+            <button id="reset">전체 초기화</button>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <h2>판정 기록</h2>
+          <ul id="events" class="log" aria-live="polite"></ul>
+        </section>
+      </aside>
+
+      <section class="panel checklist">
+        <h2>사람 확인 목록</h2>
+        <ul>
+          <li>선행 연구가 없으면 연구 가능한 기술이 명확한가?</li>
+          <li>선행 조건이 부족한 기술은 잠겨 있는가?</li>
+          <li>연구를 시작하면 시험용 자원이 차감되는가?</li>
+          <li>연구 시간이 실제로 진행되는가?</li>
+          <li>시간이 다 지나기 전에는 연구가 완료되지 않는가?</li>
+          <li>연구 완료 후 후속 기술이 해금되는가?</li>
+          <li>복수 선행 연구는 두 조건을 모두 요구하는가?</li>
+          <li>완료한 연구를 다시 연구할 수 없는가?</li>
+          <li>현재 시험 구조에서 동시에 두 기술을 연구할 수 없는가?</li>
+          <li>서로 다른 진영의 연구 상태가 독립적인 구조로 이해되는가?</li>
+          <li>완료 연구가 아직 실제 병력·도로 능력치를 바꾸지 않는 점이 명확한가?</li>
+          <li>현재 기술명·시간·비용·트리가 시험값임이 명확한가?</li>
+          <li>영어를 읽지 않아도 모든 화면을 이해할 수 있는가?</li>
+          <li>향후 실제 기술 효과를 연결하기 좋은 기반처럼 보이는가?</li>
+        </ul>
+      </section>
+    </section>
+
+    <footer>진영 단위 연구 상태만 기록 · 연구 시설, 연구 대기열, 취소·환불과 실제 기술 효과는 포함하지 않음</footer>
+  </main>
+
+  <script>
+    const 기술목록=[
+      {id:"기초군수",이름:"기초 군수 연구",비용:50,시간:10,선행:[],영역:"a"},
+      {id:"도로정비",이름:"도로 정비 연구",비용:70,시간:12,선행:["기초군수"],영역:"b"},
+      {id:"증원조직",이름:"증원 조직 연구",비용:80,시간:14,선행:["기초군수"],영역:"c"},
+      {id:"전선운영",이름:"전선 운영 연구",비용:120,시간:18,선행:["도로정비","증원조직"],영역:"d"}
+    ];
+    const 기술=id=>기술목록.find(항목=>항목.id===id);
+    function 새상태(){return{자원:400,완료:new Set(),진행:null,기록:["준비됨 · 기초 군수 연구를 시작할 수 있습니다"]}}
+    function 상태판정(상태,항목){if(상태.완료.has(항목.id))return"연구 완료";if(상태.진행?.id===항목.id)return"연구 중";return 항목.선행.every(id=>상태.완료.has(id))?"연구 가능":"잠김"}
+    function 잠금이유(상태,항목){const 부족=항목.선행.filter(id=>!상태.완료.has(id)).map(id=>기술(id).이름);return 부족.length?`선행 연구 필요: ${부족.join(", ")}`:"선행 연구 충족"}
+    function 연구시작(상태,id){const 항목=기술(id);if(!항목){상태.기록.unshift("알 수 없는 연구입니다");return false}if(상태.완료.has(id)){상태.기록.unshift(`${항목.이름} · 이미 연구 완료`);return false}if(상태.진행){상태.기록.unshift("현재 다른 연구가 진행 중입니다");return false}if(!항목.선행.every(선행=>상태.완료.has(선행))){상태.기록.unshift(`${항목.이름} · ${잠금이유(상태,항목)}`);return false}if(상태.자원<항목.비용){상태.기록.unshift(`${항목.이름} · 시험용 자원 부족`);return false}상태.자원-=항목.비용;상태.진행={id,진행:0,필요:항목.시간};상태.기록.unshift(`${항목.이름} 시작 · 시험용 자원 ${항목.비용} 차감`);return true}
+    function 시간진행(상태,초){if(!상태.진행){상태.기록.unshift("진행 중인 연구가 없습니다");return{완료:false,적용:0,남음:초}}const 적용=Math.min(초,상태.진행.필요-상태.진행.진행);상태.진행.진행+=적용;const 남음=초-적용;if(상태.진행.진행===상태.진행.필요){const id=상태.진행.id;상태.완료.add(id);상태.진행=null;상태.기록.unshift(`${기술(id).이름} · 연구 완료`);return{완료:true,적용,남음}}상태.기록.unshift(`${기술(상태.진행.id).이름} · ${상태.진행.진행}/${상태.진행.필요}초`);return{완료:false,적용,남음}}
+    function 정적검사(){const 확인=[],기대=(조건,이름)=>{if(!조건)throw new Error(`04A 정적 검사 실패: ${이름}`);확인.push(이름)};let 상태=새상태();기대(상태.자원===400&&상태.완료.size===0&&!상태.진행,"초기화");기대(document.documentElement.lang==="ko"&&document.characterSet==="UTF-8","한국어 화면 설정");기대(기술목록.length===4&&기술목록.every(항목=>항목.이름.endsWith("연구")),"시험 기술 표시");기대(상태판정(상태,기술("도로정비"))==="잠김"&&상태판정(상태,기술("전선운영"))==="잠김","선행 조건 잠금");기대(연구시작(상태,"기초군수")&&상태.진행.id==="기초군수","기초 연구 시작");기대(상태.자원===350,"연구 비용 감소");기대(!시간진행(상태,4).완료&&상태.진행.진행===4,"부분 시간 진행");const 동시자원=상태.자원;기대(!연구시작(상태,"도로정비")&&상태.자원===동시자원&&상태.진행.id==="기초군수","동시 연구 방지");기대(시간진행(상태,6).완료&&상태.완료.has("기초군수"),"기초 연구 완료");기대(상태판정(상태,기술("도로정비"))==="연구 가능"&&상태판정(상태,기술("증원조직"))==="연구 가능","분기 연구 해금");연구시작(상태,"도로정비");기대(시간진행(상태,20).완료&&상태.완료.has("도로정비"),"도로 정비 완료");기대(상태판정(상태,기술("전선운영"))==="잠김","합류 연구 계속 잠김");연구시작(상태,"증원조직");기대(시간진행(상태,14).완료&&상태.완료.has("증원조직"),"증원 조직 완료");기대(상태판정(상태,기술("전선운영"))==="연구 가능","합류 연구 해금");연구시작(상태,"전선운영");기대(시간진행(상태,18).완료&&상태.완료.size===4,"합류 연구 완료");const 완료자원=상태.자원;기대(!연구시작(상태,"기초군수")&&상태.자원===완료자원,"완료 연구 재시작 방지");상태=새상태();기대(상태.자원===400&&상태.완료.size===0&&!상태.진행,"전체 초기화");return{통과:true,확인}}
+    if(typeof window!=="undefined")window.__technologyResearch04A={기술목록,새상태,상태판정,잠금이유,연구시작,시간진행,정적검사};
+    if(typeof document!=="undefined"){
+      const 요소=id=>document.getElementById(id);let 상태=새상태();
+      function 카드상태클래스(표시){return 표시==="잠김"?"locked":표시==="연구 가능"?"available":표시==="연구 중"?"active":"completed"}
+      function 화면갱신(){요소("resource").textContent=String(상태.자원);요소("activeResearch").textContent=상태.진행?기술(상태.진행.id).이름:"없음";요소("progressText").textContent=상태.진행?`${상태.진행.진행} / ${상태.진행.필요}초`:"0 / 0초";요소("progressBar").style.width=상태.진행?`${상태.진행.진행/상태.진행.필요*100}%`:"0%";요소("completedCount").textContent=`${상태.완료.size}개`;요소("tree").innerHTML=기술목록.map(항목=>{const 표시=상태판정(상태,항목),잠김=표시==="잠김",완료=표시==="연구 완료",선행=항목.선행.length?항목.선행.map(id=>기술(id).이름).join(", "):"없음";return`<article class="tech-card ${카드상태클래스(표시)}" data-area="${항목.영역}"><div class="tech-head"><h3 class="tech-name">${항목.이름}</h3><span class="status">${표시}</span></div><div class="tech-meta"><span>비용 ${항목.비용}</span><span>연구 시간 ${항목.시간}초</span></div><p class="requirement">선행 연구: ${선행}${잠김?`<br>${잠금이유(상태,항목)}`:""}</p><button data-research="${항목.id}" ${잠김||완료?"disabled":""}>연구 시작</button></article>`}).join("");document.querySelectorAll("[data-research]").forEach(버튼=>버튼.onclick=()=>{연구시작(상태,버튼.dataset.research);화면갱신()});요소("advanceOne").disabled=!상태.진행;요소("advanceFive").disabled=!상태.진행;요소("advanceComplete").disabled=!상태.진행;요소("concurrentTest").disabled=!상태.진행;요소("events").innerHTML=상태.기록.slice(0,8).map(기록=>`<li>${기록}</li>`).join("")}
+      요소("advanceOne").onclick=()=>{시간진행(상태,1);화면갱신()};
+      요소("advanceFive").onclick=()=>{시간진행(상태,5);화면갱신()};
+      요소("advanceComplete").onclick=()=>{if(상태.진행)시간진행(상태,상태.진행.필요-상태.진행.진행);화면갱신()};
+      요소("concurrentTest").onclick=()=>{const 후보=기술목록.find(항목=>항목.id!==상태.진행?.id&&!상태.완료.has(항목.id));if(후보)연구시작(상태,후보.id);화면갱신()};
+      요소("reset").onclick=()=>{상태=새상태();상태.기록.unshift("전체 초기화 완료");화면갱신()};
+      const 검사결과=정적검사();상태.기록.unshift(`내장 정적 검사 ${검사결과.확인.length}개 통과`);화면갱신();
+    }
+  </script>
+</body>
+</html>

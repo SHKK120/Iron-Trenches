@@ -3,7 +3,8 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_CORE_03E_ProductionCaptureQueue.html`: 현재 Production Facility Capture + Queue Resolution 기술 Preview
+- `RTS_CORE_04A_TechnologyResearch.html`: 현재 Technology Research Foundation 기술 Preview
+- `RTS_CORE_03E_ProductionCaptureQueue.html`: 이전 Production Facility Capture + Queue Resolution 기술 Preview
 - `RTS_CORE_03D_RouteThreatInterdiction.html`: 이전 Route Threat + Interdiction + Isolation Semantics 기술 Preview
 - `RTS_CORE_03C_ProductionReinforcement.html`: 이전 Production + Reinforcement Source Integration 기술 Preview
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`: 이전 Terrain Movement + Road Network + Physical Reinforcement 기술 Preview
@@ -15,14 +16,23 @@
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## RTS-CORE-03E 현재 기술 시나리오
+## RTS-CORE-04A 현재 기술 시나리오
+
+- A 기초 군수에서 B 도로 정비와 C 증원 조직으로 분기하고 둘을 모두 완료하면 D 전선 운영이 열리는 작은 DAG
+- 연구 정의, 선행 조건, 잠김·연구 가능·연구 중·연구 완료 상태와 Faction별 완료 연구 조회
+- 기존 단일 시험 경제 자원을 연구 시작 시 즉시 지불하고 실패 시 Balance와 연구 상태 모두 불변
+- 진영당 Active Research 1개 `[시험 구조]`, 내부 Timer나 자동 Research Queue 없이 명시적 시간 진행
+- 완료 시 Active를 비우고 완료 ID를 중복 없이 기록하며 초과 시간은 다음 연구에 자동 적용하지 않음
+- 연구 완료에 따른 실제 Unit/Building/Road/Production 효과는 없으며 Q-011의 최종 Tree/Tier/Doctrine 구조는 `[미정]`
+
+## RTS-CORE-03E 이전 기술 시나리오
 
 - 기존 Territory Building Capture 결과를 사용해 완공 생산시설의 새 소유 진영 이전을 표시
 - `[시험 규칙]` 점령된 생산시설의 진행 중·대기 중 생산 작업을 모두 취소하고 진행도를 소실
 - 기존 소유 진영 환불 없음, 새 소유 진영에 기존 대기열·생산물 자동 이전 없음
 - 점령 전 생산 완료된 출발 대기 병력과 이미 이동 중인 병력은 기존 진영과 객체를 유지
 - 점령 뒤 새 소유 진영은 빈 대기열에서 정상 비용을 지불하고 새 생산을 즉시 시작 가능
-- Q-015는 사람 확인 전까지 `[미정]`, 완료 병력의 최종 처리는 Q-018 `[미정]`
+- Q-015는 사람 확인을 거쳐 기존 Queue 전부 취소·진행도 소실·환불 없음·새 Owner 이전 없음으로 `[확정]`, 완료 병력의 최종 처리는 Q-018 `[미정]`
 
 ## RTS-CORE-03D 이전 기술 시나리오
 
@@ -87,7 +97,8 @@
 
 - 순수 C# Core와 `ManagedPcChecks`가 기술 정본이다.
 - `RTS_CORE_03A_SupplyConnectivity.html`은 Supply 규칙과 연결 판독용 Preview다.
-- `RTS_CORE_03E_ProductionCaptureQueue.html`은 완공 생산시설 점령, 기존 Queue 취소·환불 없음과 Ready/EnRoute 보존을 확인하는 현재 기술 Preview다.
+- `RTS_CORE_04A_TechnologyResearch.html`은 선행 연구 DAG, 비용 지불, 명시적 진행과 완료 연구 해금을 확인하는 현재 한글 기술 Preview다.
+- `RTS_CORE_03E_ProductionCaptureQueue.html`은 완공 생산시설 점령, 기존 Queue 취소·환불 없음과 Ready/EnRoute 보존을 확인하는 이전 기술 Preview다.
 - `RTS_CORE_03D_RouteThreatInterdiction.html`은 실제 C# Route Threat 평가, 안전 경로 선호, 위험 경로 강행과 완전 고립을 구분하는 이전 기술 Preview다.
 - `RTS_CORE_03C_ProductionReinforcement.html`은 Production→Ready At Source→기존 Dispatch 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`은 Terrain/Road/Reinforcement 계약을 단계별로 확인하는 이전 기술 Preview다.

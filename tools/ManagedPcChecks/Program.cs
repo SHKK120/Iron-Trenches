@@ -3441,6 +3441,386 @@ ExpectThrows<ArgumentNullException>(
     () => ProductionFacilityCaptureResolutionService.Resolve(captureTransfer, captureBuildings, captureProfiles, null!, ProductionCaptureQueuePolicy.CancelWithoutRefund),
     "03E accepted null production queues.");
 
+var researchA = new ResearchDefinition(
+    "basic-logistics",
+    50,
+    10f,
+    Array.Empty<string>());
+var researchB = new ResearchDefinition(
+    "road-maintenance",
+    70,
+    12f,
+    new[] { researchA.ResearchId });
+var researchC = new ResearchDefinition(
+    "reinforcement-organization",
+    80,
+    14f,
+    new[] { researchA.ResearchId });
+var researchD = new ResearchDefinition(
+    "frontline-operations",
+    120,
+    18f,
+    new[] { researchB.ResearchId, researchC.ResearchId });
+Expect(researchA.ResearchId == "basic-logistics", "04A ResearchDefinition lost its id.");
+Expect(researchA.PrototypeCost == 50, "04A ResearchDefinition lost its prototype cost.");
+Expect(researchA.ResearchSeconds == 10f, "04A ResearchDefinition lost its duration.");
+Expect(researchA.PrerequisiteResearchIds.Count == 0, "04A root research gained prerequisites.");
+Expect(researchD.PrerequisiteResearchIds.Count == 2, "04A multi-prerequisite research lost a prerequisite.");
+var mutablePrerequisites = new List<string> { researchA.ResearchId };
+var immutableDefinition = new ResearchDefinition(
+    "immutable-research",
+    0,
+    1f,
+    mutablePrerequisites);
+mutablePrerequisites.Clear();
+Expect(immutableDefinition.PrerequisiteResearchIds.Count == 1, "04A ResearchDefinition prerequisites changed with the source collection.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchDefinition("", 0, 1f, Array.Empty<string>()),
+    "04A accepted a blank research id.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ResearchDefinition("negative-cost", -1, 1f, Array.Empty<string>()),
+    "04A accepted a negative research cost.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ResearchDefinition("zero-seconds", 0, 0f, Array.Empty<string>()),
+    "04A accepted zero research seconds.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ResearchDefinition("negative-seconds", 0, -1f, Array.Empty<string>()),
+    "04A accepted negative research seconds.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ResearchDefinition("nan-seconds", 0, float.NaN, Array.Empty<string>()),
+    "04A accepted NaN research seconds.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ResearchDefinition("infinite-seconds", 0, float.PositiveInfinity, Array.Empty<string>()),
+    "04A accepted infinite research seconds.");
+ExpectThrows<ArgumentNullException>(
+    () => new ResearchDefinition("null-prerequisites", 0, 1f, null!),
+    "04A accepted null prerequisites.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchDefinition("blank-prerequisite", 0, 1f, new[] { " " }),
+    "04A accepted a blank prerequisite id.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchDefinition("duplicate-prerequisite", 0, 1f, new[] { "root", "root" }),
+    "04A accepted a duplicate prerequisite id.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchDefinition("self-prerequisite", 0, 1f, new[] { "self-prerequisite" }),
+    "04A accepted a self prerequisite.");
+
+var researchCatalog = new ResearchCatalog(new[] { researchD, researchB, researchA, researchC });
+Expect(researchCatalog.Definitions.Count == 4, "04A ResearchCatalog lost a definition.");
+Expect(researchCatalog.Definitions[0].ResearchId == "basic-logistics", "04A ResearchCatalog enumeration was not deterministic.");
+Expect(researchCatalog.Contains(researchC.ResearchId), "04A ResearchCatalog did not contain a registered id.");
+Expect(ReferenceEquals(researchCatalog.GetRequired(researchB.ResearchId), researchB), "04A ResearchCatalog lookup replaced a definition.");
+Expect(researchCatalog.TryGet(researchD.ResearchId, out var lookedUpResearch) && ReferenceEquals(lookedUpResearch, researchD), "04A ResearchCatalog TryGet failed for a registered id.");
+Expect(!researchCatalog.TryGet("unknown-research", out var missingResearch) && missingResearch == null, "04A ResearchCatalog found an unknown id.");
+ExpectThrows<KeyNotFoundException>(
+    () => researchCatalog.GetRequired("unknown-research"),
+    "04A ResearchCatalog GetRequired accepted an unknown id.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchCatalog(new[] { researchA, researchA }),
+    "04A ResearchCatalog accepted duplicate research ids.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchCatalog(new[]
+    {
+        new ResearchDefinition("unknown-prerequisite-owner", 0, 1f, new[] { "missing-prerequisite" })
+    }),
+    "04A ResearchCatalog accepted an unknown prerequisite.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchCatalog(new[]
+    {
+        new ResearchDefinition("cycle-two-a", 0, 1f, new[] { "cycle-two-b" }),
+        new ResearchDefinition("cycle-two-b", 0, 1f, new[] { "cycle-two-a" })
+    }),
+    "04A ResearchCatalog accepted a two-node cycle.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchCatalog(new[]
+    {
+        new ResearchDefinition("cycle-three-a", 0, 1f, new[] { "cycle-three-b" }),
+        new ResearchDefinition("cycle-three-b", 0, 1f, new[] { "cycle-three-c" }),
+        new ResearchDefinition("cycle-three-c", 0, 1f, new[] { "cycle-three-a" })
+    }),
+    "04A ResearchCatalog accepted a three-node cycle.");
+var emptyResearchCatalog = new ResearchCatalog(Array.Empty<ResearchDefinition>());
+Expect(emptyResearchCatalog.Definitions.Count == 0, "04A empty ResearchCatalog was not empty.");
+
+var blueResearchState = new FactionResearchState("blue");
+var redResearchState = new FactionResearchState("red");
+Expect(blueResearchState.FactionId == "blue", "04A FactionResearchState lost the faction id.");
+Expect(blueResearchState.CompletedResearchIds.Count == 0, "04A new research state contained completed research.");
+Expect(blueResearchState.ActiveResearch == null, "04A new research state contained active research.");
+Expect(!blueResearchState.IsCompleted(researchA.ResearchId), "04A new research state reported a completed research.");
+ExpectThrows<ArgumentException>(
+    () => new FactionResearchState(" "),
+    "04A accepted a blank research faction id.");
+ExpectThrows<ArgumentException>(
+    () => blueResearchState.IsCompleted(""),
+    "04A IsCompleted accepted a blank research id.");
+
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchA.ResearchId) == ResearchAvailability.Available, "04A root research was not available.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchB.ResearchId) == ResearchAvailability.Locked, "04A unmet branch research was not locked.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchC.ResearchId) == ResearchAvailability.Locked, "04A second unmet branch research was not locked.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchD.ResearchId) == ResearchAvailability.Locked, "04A multi-prerequisite research was not locked.");
+ExpectThrows<KeyNotFoundException>(
+    () => ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, "unknown-research"),
+    "04A availability accepted an unknown research.");
+
+var blueResearchEconomy = new EconomyState("blue", 500);
+var lockedStartBalance = blueResearchEconomy.Balance;
+var lockedResearchStart = ResearchService.Start(
+    researchB.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(!lockedResearchStart.Success, "04A started research with an unmet prerequisite.");
+Expect(lockedResearchStart.FailureReason == ResearchStartFailureReason.PrerequisiteMissing, "04A locked research returned the wrong start failure.");
+Expect(blueResearchEconomy.Balance == lockedStartBalance, "04A locked research changed economy balance.");
+Expect(blueResearchState.ActiveResearch == null, "04A locked research changed faction state.");
+
+var insufficientResearchState = new FactionResearchState("blue");
+var insufficientResearchEconomy = new EconomyState("blue", 49);
+var insufficientResearchStart = ResearchService.Start(
+    researchA.ResearchId,
+    researchCatalog,
+    insufficientResearchState,
+    insufficientResearchEconomy);
+Expect(!insufficientResearchStart.Success, "04A started research without sufficient funds.");
+Expect(insufficientResearchStart.FailureReason == ResearchStartFailureReason.InsufficientFunds, "04A insufficient funds returned the wrong failure.");
+Expect(insufficientResearchEconomy.Balance == 49, "04A insufficient funds changed economy balance.");
+Expect(insufficientResearchState.ActiveResearch == null, "04A insufficient funds changed research state.");
+
+var mismatchResearchEconomy = new EconomyState("red", 500);
+var mismatchResearchStart = ResearchService.Start(
+    researchA.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    mismatchResearchEconomy);
+Expect(!mismatchResearchStart.Success, "04A accepted mismatched research and economy factions.");
+Expect(mismatchResearchStart.FailureReason == ResearchStartFailureReason.FactionMismatch, "04A faction mismatch returned the wrong failure.");
+Expect(mismatchResearchEconomy.Balance == 500 && blueResearchState.ActiveResearch == null, "04A faction mismatch changed state.");
+
+var unknownResearchBalance = blueResearchEconomy.Balance;
+var unknownResearchStart = ResearchService.Start(
+    "unknown-research",
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(!unknownResearchStart.Success, "04A started unknown research.");
+Expect(unknownResearchStart.FailureReason == ResearchStartFailureReason.UnknownResearch, "04A unknown research returned the wrong failure.");
+Expect(blueResearchEconomy.Balance == unknownResearchBalance && blueResearchState.ActiveResearch == null, "04A unknown research changed state.");
+
+var startResearchA = ResearchService.Start(
+    researchA.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(startResearchA.Success, "04A root research did not start.");
+Expect(startResearchA.PreviousBalance == 500 && startResearchA.NewBalance == 450, "04A research start balance result was incorrect.");
+Expect(blueResearchEconomy.Balance == 450, "04A research start did not charge the prototype cost.");
+Expect(ReferenceEquals(startResearchA.ActiveResearch, blueResearchState.ActiveResearch), "04A research start returned another progress object.");
+Expect(blueResearchState.ActiveResearch!.ResearchId == researchA.ResearchId, "04A active research id was incorrect.");
+Expect(blueResearchState.ActiveResearch.ProgressSeconds == 0f, "04A active research began with progress.");
+Expect(blueResearchState.ActiveResearch.RequiredSeconds == 10f, "04A active research lost its required duration.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchA.ResearchId) == ResearchAvailability.Active, "04A active research availability was incorrect.");
+
+var balanceBeforeDuplicateStart = blueResearchEconomy.Balance;
+var duplicateActiveStart = ResearchService.Start(
+    researchA.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(!duplicateActiveStart.Success, "04A started the same active research twice.");
+Expect(duplicateActiveStart.FailureReason == ResearchStartFailureReason.AlreadyActive, "04A duplicate active start returned the wrong failure.");
+Expect(blueResearchEconomy.Balance == balanceBeforeDuplicateStart, "04A duplicate active start charged twice.");
+Expect(blueResearchState.ActiveResearch!.ProgressSeconds == 0f, "04A duplicate active start changed progress.");
+
+var anotherActiveStart = ResearchService.Start(
+    researchB.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(!anotherActiveStart.Success, "04A allowed a second simultaneous research.");
+Expect(anotherActiveStart.FailureReason == ResearchStartFailureReason.AnotherResearchActive, "04A one-active trial rule returned the wrong failure.");
+Expect(blueResearchEconomy.Balance == balanceBeforeDuplicateStart, "04A second simultaneous research changed balance.");
+Expect(blueResearchState.ActiveResearch!.ResearchId == researchA.ResearchId, "04A second simultaneous research replaced the active research.");
+
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => ResearchService.Advance(blueResearchState, -1f),
+    "04A accepted negative research delta time.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => ResearchService.Advance(blueResearchState, float.NaN),
+    "04A accepted NaN research delta time.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => ResearchService.Advance(blueResearchState, float.PositiveInfinity),
+    "04A accepted infinite research delta time.");
+var zeroResearchAdvance = ResearchService.Advance(blueResearchState, 0f);
+Expect(zeroResearchAdvance.Success && zeroResearchAdvance.AppliedSeconds == 0f, "04A zero research advance was not a no-op success.");
+var researchAdvanceFour = ResearchService.Advance(blueResearchState, 4f);
+Expect(researchAdvanceFour.Success && !researchAdvanceFour.Completed, "04A partial research advance completed too early.");
+Expect(researchAdvanceFour.AppliedSeconds == 4f && researchAdvanceFour.UnusedSeconds == 0f, "04A partial research advance accounting was incorrect.");
+Expect(blueResearchState.ActiveResearch!.ProgressSeconds == 4f, "04A first partial research progress was incorrect.");
+var researchAdvanceFive = ResearchService.Advance(blueResearchState, 5f);
+Expect(researchAdvanceFive.Success && !researchAdvanceFive.Completed, "04A second partial research advance completed too early.");
+Expect(blueResearchState.ActiveResearch!.ProgressSeconds == 9f, "04A accumulated research progress was incorrect.");
+var researchAdvanceOne = ResearchService.Advance(blueResearchState, 1f);
+Expect(researchAdvanceOne.Success && researchAdvanceOne.Completed, "04A exact research duration did not complete.");
+Expect(researchAdvanceOne.CompletedResearchId == researchA.ResearchId, "04A completion returned the wrong research id.");
+Expect(blueResearchState.ActiveResearch == null, "04A completion did not clear active research.");
+Expect(blueResearchState.IsCompleted(researchA.ResearchId), "04A completion was not recorded.");
+Expect(blueResearchState.CompletedResearchIds.Count == 1, "04A completion was recorded more than once.");
+
+var noActiveAdvance = ResearchService.Advance(blueResearchState, 3f);
+Expect(!noActiveAdvance.Success, "04A advance without active research succeeded.");
+Expect(noActiveAdvance.FailureReason == ResearchAdvanceFailureReason.NoActiveResearch, "04A no-active advance returned the wrong failure.");
+Expect(noActiveAdvance.AppliedSeconds == 0f && noActiveAdvance.UnusedSeconds == 3f, "04A no-active advance accounting was incorrect.");
+var balanceBeforeCompletedRestart = blueResearchEconomy.Balance;
+var completedRestart = ResearchService.Start(
+    researchA.ResearchId,
+    researchCatalog,
+    blueResearchState,
+    blueResearchEconomy);
+Expect(!completedRestart.Success, "04A restarted completed research.");
+Expect(completedRestart.FailureReason == ResearchStartFailureReason.AlreadyCompleted, "04A completed restart returned the wrong failure.");
+Expect(blueResearchEconomy.Balance == balanceBeforeCompletedRestart, "04A completed restart charged another cost.");
+
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchA.ResearchId) == ResearchAvailability.Completed, "04A completed research availability was incorrect.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchB.ResearchId) == ResearchAvailability.Available, "04A first branch did not unlock.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchC.ResearchId) == ResearchAvailability.Available, "04A second branch did not unlock independently.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchD.ResearchId) == ResearchAvailability.Locked, "04A multi-prerequisite research unlocked too early.");
+
+var startResearchB = ResearchService.Start(researchB.ResearchId, researchCatalog, blueResearchState, blueResearchEconomy);
+Expect(startResearchB.Success, "04A first branch research did not start.");
+var completeResearchB = ResearchService.Advance(blueResearchState, 20f);
+Expect(completeResearchB.Success && completeResearchB.CompletedResearchId == researchB.ResearchId, "04A first branch research did not complete.");
+Expect(completeResearchB.AppliedSeconds == 12f && completeResearchB.UnusedSeconds == 8f, "04A excess research time was not discarded correctly.");
+Expect(blueResearchState.ActiveResearch == null, "04A excess time automatically started another research.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchC.ResearchId) == ResearchAvailability.Available, "04A completing one branch locked the other branch.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchD.ResearchId) == ResearchAvailability.Locked, "04A multi-prerequisite research unlocked with one prerequisite.");
+
+var startResearchC = ResearchService.Start(researchC.ResearchId, researchCatalog, blueResearchState, blueResearchEconomy);
+Expect(startResearchC.Success, "04A second branch research did not start.");
+var partialResearchC = ResearchService.Advance(blueResearchState, 7f);
+Expect(partialResearchC.Success && !partialResearchC.Completed, "04A second branch partial advance completed early.");
+var dDuringCStart = ResearchService.Start(researchD.ResearchId, researchCatalog, blueResearchState, blueResearchEconomy);
+Expect(!dDuringCStart.Success && dDuringCStart.FailureReason == ResearchStartFailureReason.AnotherResearchActive, "04A allowed multi-prerequisite research during another active research.");
+Expect(blueResearchState.ActiveResearch!.ProgressSeconds == 7f, "04A rejected concurrent start changed active progress.");
+var completeResearchC = ResearchService.Advance(blueResearchState, 7f);
+Expect(completeResearchC.CompletedResearchId == researchC.ResearchId, "04A second branch research did not complete.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, blueResearchState, researchD.ResearchId) == ResearchAvailability.Available, "04A multi-prerequisite research did not unlock after both prerequisites.");
+
+var startResearchD = ResearchService.Start(researchD.ResearchId, researchCatalog, blueResearchState, blueResearchEconomy);
+Expect(startResearchD.Success, "04A multi-prerequisite research did not start.");
+var completeResearchD = ResearchService.Advance(blueResearchState, 18f);
+Expect(completeResearchD.CompletedResearchId == researchD.ResearchId, "04A multi-prerequisite research did not complete.");
+Expect(blueResearchState.CompletedResearchIds.Count == 4, "04A completed research set did not contain A/B/C/D exactly once.");
+Expect(blueResearchState.IsCompleted(researchA.ResearchId) && blueResearchState.IsCompleted(researchB.ResearchId) && blueResearchState.IsCompleted(researchC.ResearchId) && blueResearchState.IsCompleted(researchD.ResearchId), "04A integration flow did not complete every research.");
+
+Expect(redResearchState.CompletedResearchIds.Count == 0 && redResearchState.ActiveResearch == null, "04A Blue research changed Red state.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, redResearchState, researchA.ResearchId) == ResearchAvailability.Available, "04A Red root availability was not independent.");
+Expect(ResearchAvailabilityResolver.Resolve(researchCatalog, redResearchState, researchB.ResearchId) == ResearchAvailability.Locked, "04A Blue completion unlocked Red branch research.");
+var redResearchEconomy = new EconomyState("red", 100);
+Expect(ResearchService.Start(researchA.ResearchId, researchCatalog, redResearchState, redResearchEconomy).Success, "04A Red root research did not start independently.");
+Expect(ResearchService.Advance(redResearchState, 10f).CompletedResearchId == researchA.ResearchId, "04A Red root research did not complete independently.");
+Expect(redResearchState.IsCompleted(researchA.ResearchId), "04A Red completion was not recorded.");
+Expect(blueResearchState.CompletedResearchIds.Count == 4, "04A Red research changed Blue completed research.");
+
+var regressionResearchState = new FactionResearchState("blue");
+var regressionEconomy = new EconomyState("blue", 300);
+var supplyBeforeResearch = StrategicSupplyResolver.Resolve(
+    captureQueueTerritory,
+    "blue",
+    new[] { new SupplySourceDefinition("research-regression-source", "blue", "capture-red-sector") });
+var otherQueueCountBeforeResearch = captureOtherQueue.Orders.Count;
+var productionCostBeforeResearch = captureDefinition.PrototypeCost;
+Expect(ResearchService.Start(researchA.ResearchId, researchCatalog, regressionResearchState, regressionEconomy).Success, "04A regression research did not start.");
+Expect(ResearchService.Advance(regressionResearchState, 10f).Completed, "04A regression research did not complete.");
+var supplyAfterResearch = StrategicSupplyResolver.Resolve(
+    captureQueueTerritory,
+    "blue",
+    new[] { new SupplySourceDefinition("research-regression-source", "blue", "capture-red-sector") });
+Expect(supplyAfterResearch.GetStatus("capture-blue-sector") == supplyBeforeResearch.GetStatus("capture-blue-sector"), "04A research changed Strategic Supply.");
+Expect(captureOtherQueue.Orders.Count == otherQueueCountBeforeResearch, "04A research changed an existing ProductionQueue.");
+Expect(captureDefinition.PrototypeCost == productionCostBeforeResearch, "04A research changed ProductionDefinition.");
+var incomeAfterResearch = SectorIncomeCollector.Collect(
+    captureQueueTerritory,
+    new[]
+    {
+        new SectorIncomeProfile("capture-blue-sector", 10),
+        new SectorIncomeProfile("capture-red-sector", 20),
+        new SectorIncomeProfile("capture-other-sector", 30)
+    },
+    regressionEconomy);
+Expect(incomeAfterResearch.CollectedAmount == 30, "04A research changed Sector income resolution.");
+Expect(regressionEconomy.Balance == 280, "04A research and Sector income balance integration was incorrect.");
+var regressionProductionQueues = new List<ProductionQueue>();
+var regressionProduction = EnqueueCaptureOrder(
+    "research-regression-production-order",
+    "research-regression-production-reinforcement",
+    captureBarracksA.BuildingId,
+    "blue",
+    regressionEconomy,
+    "capture-blue-sector",
+    new WorldPoint(0f, 0f),
+    regressionProductionQueues,
+    captureBuildings,
+    Array.Empty<ReadyReinforcement>());
+Expect(regressionProduction.Success, "04A research broke existing Production enqueue.");
+Expect(regressionEconomy.Balance == 240, "04A research changed the Production cost path.");
+
+var researchCaptureBuilding = new BuildingState(
+    "research-capture-barracks",
+    "Barracks",
+    "red",
+    "capture-other-sector",
+    new WorldPoint(34f, 0f),
+    2f);
+var researchCaptureBuildings = new List<BuildingState> { researchCaptureBuilding };
+var researchCaptureQueues = new List<ProductionQueue>();
+var researchCaptureEconomy = new EconomyState("red", 100);
+Expect(EnqueueCaptureOrder("research-capture-order", "research-capture-reinforcement", researchCaptureBuilding.BuildingId, "red", researchCaptureEconomy, "capture-other-sector", new WorldPoint(32f, 0f), researchCaptureQueues, researchCaptureBuildings, Array.Empty<ReadyReinforcement>()).Success, "04A capture regression order did not enqueue.");
+ProductionAdvanceService.Advance(researchCaptureQueues[0], researchCaptureBuilding, 11f, new List<ReadyReinforcement>());
+var researchCaptureBalance = researchCaptureEconomy.Balance;
+var researchCaptureTransfer = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    captureQueueTerritory,
+    "capture-other-anchor",
+    "blue",
+    researchCaptureBuildings);
+var researchCaptureResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    researchCaptureTransfer,
+    researchCaptureBuildings,
+    captureProfiles,
+    researchCaptureQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(researchCaptureResolution.Success, "04A broke the confirmed production capture resolution.");
+Expect(researchCaptureBuilding.OwnerId == "blue", "04A broke captured production facility ownership transfer.");
+Expect(researchCaptureQueues[0].Orders.Count == 0, "04A broke confirmed captured Queue cancellation.");
+Expect(researchCaptureResolution.CancelledOrderCount == 1, "04A capture regression did not report the cancelled order.");
+Expect(researchCaptureEconomy.Balance == researchCaptureBalance, "04A broke confirmed no-refund capture behavior.");
+Expect(regressionResearchState.IsCompleted(researchA.ResearchId), "04A production facility capture changed faction research state.");
+
+ExpectThrows<ArgumentNullException>(
+    () => new ResearchCatalog(null!),
+    "04A accepted null ResearchCatalog definitions.");
+ExpectThrows<ArgumentException>(
+    () => new ResearchCatalog(new ResearchDefinition[] { researchA, null! }),
+    "04A ResearchCatalog accepted a null definition.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchAvailabilityResolver.Resolve(null!, blueResearchState, researchA.ResearchId),
+    "04A availability accepted a null catalog.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchAvailabilityResolver.Resolve(researchCatalog, null!, researchA.ResearchId),
+    "04A availability accepted a null faction state.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchService.Start(researchA.ResearchId, null!, blueResearchState, blueResearchEconomy),
+    "04A start accepted a null catalog.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchService.Start(researchA.ResearchId, researchCatalog, null!, blueResearchEconomy),
+    "04A start accepted a null faction state.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchService.Start(researchA.ResearchId, researchCatalog, blueResearchState, null!),
+    "04A start accepted a null economy.");
+ExpectThrows<ArgumentNullException>(
+    () => ResearchService.Advance(null!, 1f),
+    "04A advance accepted a null faction state.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver
