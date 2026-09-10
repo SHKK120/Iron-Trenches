@@ -3,7 +3,8 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_CORE_03C_ProductionReinforcement.html`: 현재 Production + Reinforcement Source Integration 기술 Preview
+- `RTS_CORE_03D_RouteThreatInterdiction.html`: 현재 Route Threat + Interdiction + Isolation Semantics 기술 Preview
+- `RTS_CORE_03C_ProductionReinforcement.html`: 이전 Production + Reinforcement Source Integration 기술 Preview
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`: 이전 Terrain Movement + Road Network + Physical Reinforcement 기술 Preview
 - `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`: 사람 Gameplay Validation을 통과한 Terrain + Road + Physical Reinforcement Microgame
 - `RTS_PLAYTEST_03A_SupplyStrategy.html`: `[대체됨 — R1]` 단순 보급 차단 Gameplay Microgame
@@ -13,7 +14,17 @@
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## RTS-CORE-03C 현재 기술 시나리오
+## RTS-CORE-03D 현재 기술 시나리오
+
+- 적 이동형 위협과 고착형 위협은 도로를 삭제하거나 통행 불가로 만들지 않고 경로 위험 점수에만 반영
+- 북쪽 빠른 길과 남쪽 안전한 길의 이동 시간·위험 점수를 함께 비교해 현재 시험 Profile에서 더 나은 경로 선택
+- 대체 경로가 없으면 적 병력 또는 전초기지의 위협이 있어도 해당 경로로 강행 파견
+- Road가 없으면 Offroad fallback, Threat가 있어도 Strategic 연결은 별도로 유지
+- 아군 Territory 연결 자체가 없을 때만 기술 `CutOff`, 사용자 화면에서는 `완전 고립`으로 표시하고 새 Dispatch 차단
+- 완전 고립에서도 출발 대기와 이미 이동 중인 Reinforcement를 삭제·Teleport하지 않음
+- 위협은 Dispatch 시점 Route Planning 입력이며 자동 피해나 이동 중 재탐색을 만들지 않음
+
+## RTS-CORE-03C 이전 기술 시나리오
 
 - 단일 시험 경제 자원으로 생산 요청 비용을 지불하고 생산 시설별 FIFO Queue에 등록
 - 명시적 시간 진행과 초과 시간 소비로 Queue 선두부터 생산 완료
@@ -66,7 +77,8 @@
 
 - 순수 C# Core와 `ManagedPcChecks`가 기술 정본이다.
 - `RTS_CORE_03A_SupplyConnectivity.html`은 Supply 규칙과 연결 판독용 Preview다.
-- `RTS_CORE_03C_ProductionReinforcement.html`은 실제 C# Production→Ready At Source→기존 Dispatch 계약을 단계별로 확인하는 현재 기술 Preview다.
+- `RTS_CORE_03D_RouteThreatInterdiction.html`은 실제 C# Route Threat 평가, 안전 경로 선호, 위험 경로 강행과 완전 고립을 구분하는 현재 기술 Preview다.
+- `RTS_CORE_03C_ProductionReinforcement.html`은 Production→Ready At Source→기존 Dispatch 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`은 Terrain/Road/Reinforcement 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_PLAYTEST_03A_SupplyStrategy.html`은 단순 Supply Cut을 시험했던 이전 비정본 Gameplay Layer다.
 - `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`은 Terrain, Road Infrastructure, 실제 Reinforcement 이동·요격과 Strategic Cut Off를 함께 검증해 사람 PASS를 받은 비정본 Gameplay Layer다.
@@ -76,6 +88,7 @@
 - R1/03B Fixture의 Terrain·Road 배율과 R1의 Forest/Rocky 전투 보조, 무료·즉시 Road 건설 및 Reinforcement 수치는 모두 `[시험값/시험 규칙]`이며 최종 Balance가 아니다.
 - `[확정] HTML 사용자 인터페이스 언어 규칙`: 모든 Browser Preview와 Microgame의 사용자 화면·버튼·상태·조작 안내는 한국어를 기본으로 한다.
 - 코드 식별자와 Result Bundle 번호에는 영어를 유지할 수 있지만, 사용자 화면을 영어만으로 제공하지 않는다. 병기할 때는 한국어를 먼저 쓴다.
+- 기술 `SectorSupplyStatus.CutOff`는 사용자 UI에서 `완전 고립`으로 표시한다. 경로 주변 적 전투 요소는 `보급로 위협` 또는 `강한 보급로 위협`이며 이동 불가와 동의어가 아니다.
 - 사각형 Sector와 원형 Footprint는 Preview/검증용 시험 표현이며 최종 맵 Geometry나 Collider 확정이 아니다.
 - Preview PASS는 Unity Compile, Scene, 입력, 물리, 렌더링 또는 Play Mode PASS를 뜻하지 않는다.
 - 새 규칙을 Preview에 반영할 때는 같은 시작 상태, 조작과 기대 결과를 `ManagedPcChecks`에도 유지한다.

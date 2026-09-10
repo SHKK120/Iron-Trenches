@@ -99,9 +99,29 @@ namespace IronTrenches.Core
             WorldPoint destination,
             out IReadOnlyList<RoadSegment> path)
         {
+            var paths = FindPaths(source, destination);
+            if (paths.Count == 0)
+            {
+                path = Array.Empty<RoadSegment>();
+                return false;
+            }
+
+            path = paths[0];
+            return true;
+        }
+
+        public IReadOnlyList<IReadOnlyList<RoadSegment>> FindPaths(
+            WorldPoint source,
+            WorldPoint destination)
+        {
             if (!RoadSegment.IsFinite(source) || !RoadSegment.IsFinite(destination))
             {
                 throw new ArgumentException("Road path endpoints must be finite.");
+            }
+
+            if (RoadSegment.PointsEqual(source, destination))
+            {
+                return Array.Empty<IReadOnlyList<RoadSegment>>();
             }
 
             var sourceKey = new EndpointKey(source);
@@ -109,67 +129,26 @@ namespace IronTrenches.Core
             var graph = BuildEndpointGraph();
             if (!graph.ContainsKey(sourceKey) || !graph.ContainsKey(destinationKey))
             {
-                path = Array.Empty<RoadSegment>();
-                return false;
+                return Array.Empty<IReadOnlyList<RoadSegment>>();
             }
 
-            var distances = new Dictionary<EndpointKey, double>();
-            var previous = new Dictionary<EndpointKey, PathStep>();
-            var unvisited = new HashSet<EndpointKey>(graph.Keys);
-            foreach (var key in graph.Keys)
+            var paths = new List<List<RoadSegment>>();
+            CollectPaths(
+                graph,
+                sourceKey,
+                destinationKey,
+                new HashSet<EndpointKey> { sourceKey },
+                new List<RoadSegment>(),
+                paths);
+            paths.Sort(ComparePaths);
+
+            var readOnlyPaths = new List<IReadOnlyList<RoadSegment>>();
+            foreach (var candidate in paths)
             {
-                distances.Add(key, double.PositiveInfinity);
+                readOnlyPaths.Add(candidate.AsReadOnly());
             }
 
-            distances[sourceKey] = 0d;
-            while (unvisited.Count > 0)
-            {
-                var current = FindClosest(unvisited, distances);
-                if (!current.HasValue || double.IsPositiveInfinity(distances[current.Value]))
-                {
-                    break;
-                }
-
-                unvisited.Remove(current.Value);
-                if (current.Value.Equals(destinationKey))
-                {
-                    break;
-                }
-
-                foreach (var edge in graph[current.Value])
-                {
-                    if (!unvisited.Contains(edge.Destination))
-                    {
-                        continue;
-                    }
-
-                    var candidateDistance = distances[current.Value] + edge.Segment.Length;
-                    if (candidateDistance < distances[edge.Destination])
-                    {
-                        distances[edge.Destination] = candidateDistance;
-                        previous[edge.Destination] = new PathStep(current.Value, edge.Segment);
-                    }
-                }
-            }
-
-            if (!previous.ContainsKey(destinationKey))
-            {
-                path = Array.Empty<RoadSegment>();
-                return false;
-            }
-
-            var reversed = new List<RoadSegment>();
-            var cursor = destinationKey;
-            while (!cursor.Equals(sourceKey))
-            {
-                var step = previous[cursor];
-                reversed.Add(step.Segment);
-                cursor = step.Previous;
-            }
-
-            reversed.Reverse();
-            path = reversed.AsReadOnly();
-            return true;
+            return readOnlyPaths.AsReadOnly();
         }
 
         private Dictionary<EndpointKey, List<RoadEdge>> BuildEndpointGraph()
@@ -183,7 +162,83 @@ namespace IronTrenches.Core
                 AddEdge(graph, end, new RoadEdge(start, segment));
             }
 
+            foreach (var edges in graph.Values)
+            {
+                edges.Sort((left, right) => string.CompareOrdinal(
+                    left.Segment.RoadSegmentId,
+                    right.Segment.RoadSegmentId));
+            }
+
             return graph;
+        }
+
+        private static void CollectPaths(
+            IReadOnlyDictionary<EndpointKey, List<RoadEdge>> graph,
+            EndpointKey current,
+            EndpointKey destination,
+            ISet<EndpointKey> visited,
+            IList<RoadSegment> currentPath,
+            ICollection<List<RoadSegment>> paths)
+        {
+            if (current.Equals(destination))
+            {
+                paths.Add(new List<RoadSegment>(currentPath));
+                return;
+            }
+
+            foreach (var edge in graph[current])
+            {
+                if (!visited.Add(edge.Destination))
+                {
+                    continue;
+                }
+
+                currentPath.Add(edge.Segment);
+                CollectPaths(
+                    graph,
+                    edge.Destination,
+                    destination,
+                    visited,
+                    currentPath,
+                    paths);
+                currentPath.RemoveAt(currentPath.Count - 1);
+                visited.Remove(edge.Destination);
+            }
+        }
+
+        private static int ComparePaths(
+            IReadOnlyCollection<RoadSegment> left,
+            IReadOnlyCollection<RoadSegment> right)
+        {
+            var lengthComparison = GetPathLength(left).CompareTo(GetPathLength(right));
+            if (lengthComparison != 0)
+            {
+                return lengthComparison;
+            }
+
+            return string.CompareOrdinal(GetPathKey(left), GetPathKey(right));
+        }
+
+        private static double GetPathLength(IEnumerable<RoadSegment> path)
+        {
+            var total = 0d;
+            foreach (var segment in path)
+            {
+                total += segment.Length;
+            }
+
+            return total;
+        }
+
+        private static string GetPathKey(IEnumerable<RoadSegment> path)
+        {
+            var ids = new List<string>();
+            foreach (var segment in path)
+            {
+                ids.Add(segment.RoadSegmentId);
+            }
+
+            return string.Join("\u001f", ids);
         }
 
         private static void AddEdge(
@@ -198,24 +253,6 @@ namespace IronTrenches.Core
             }
 
             edges.Add(edge);
-        }
-
-        private static EndpointKey? FindClosest(
-            IEnumerable<EndpointKey> candidates,
-            IReadOnlyDictionary<EndpointKey, double> distances)
-        {
-            EndpointKey? closest = null;
-            var closestDistance = double.PositiveInfinity;
-            foreach (var candidate in candidates)
-            {
-                if (distances[candidate] < closestDistance)
-                {
-                    closest = candidate;
-                    closestDistance = distances[candidate];
-                }
-            }
-
-            return closest;
         }
 
         private static float DistanceToSegment(
@@ -298,17 +335,5 @@ namespace IronTrenches.Core
             public RoadSegment Segment { get; }
         }
 
-        private readonly struct PathStep
-        {
-            public PathStep(EndpointKey previous, RoadSegment segment)
-            {
-                Previous = previous;
-                Segment = segment;
-            }
-
-            public EndpointKey Previous { get; }
-
-            public RoadSegment Segment { get; }
-        }
     }
 }

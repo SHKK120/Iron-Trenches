@@ -2565,6 +2565,418 @@ var productionIncome = SectorIncomeCollector.Collect(
 Expect(productionIncome.CollectedAmount == 60, "Production integration changed ownership-based Sector Income.");
 Expect(productionEconomy.Balance == balanceBeforeProductionIncome + 60, "Production cost state did not remain compatible with income collection.");
 
+// RTS-CORE-03D: Route threat changes route preference, never strategic connectivity.
+var mobileThreat = new RouteThreatSource(
+    "mobile-threat-north",
+    "red",
+    new WorldPoint(50f, 4f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    1f);
+var fortifiedThreat = new RouteThreatSource(
+    "fortified-threat-north",
+    "red",
+    new WorldPoint(50f, 4f),
+    10f,
+    RouteThreatKind.FortifiedPosition,
+    2.5f);
+Expect(mobileThreat.ThreatSourceId == "mobile-threat-north", "Mobile threat id was not retained.");
+Expect(mobileThreat.FactionId == "red", "Mobile threat faction was not retained.");
+Expect(mobileThreat.Position.X == 50f && mobileThreat.Position.Z == 4f, "Mobile threat position was not retained.");
+Expect(mobileThreat.ThreatRadius == 10f, "Mobile threat radius was not retained.");
+Expect(mobileThreat.ThreatKind == RouteThreatKind.MobileUnit, "Mobile threat kind was not retained.");
+Expect(mobileThreat.ThreatWeight == 1f, "Mobile threat weight was not retained.");
+Expect(fortifiedThreat.ThreatKind == RouteThreatKind.FortifiedPosition, "Fortified threat kind was not retained.");
+Expect(fortifiedThreat.ThreatWeight > mobileThreat.ThreatWeight, "Fortified fixture threat was not stronger than mobile fixture threat.");
+ExpectThrows<ArgumentException>(
+    () => new RouteThreatSource(" ", "red", new WorldPoint(0f, 0f), 1f, RouteThreatKind.MobileUnit, 1f),
+    "Blank threat source id was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RouteThreatSource("blank-faction", " ", new WorldPoint(0f, 0f), 1f, RouteThreatKind.MobileUnit, 1f),
+    "Blank threat faction was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RouteThreatSource("nan-position", "red", new WorldPoint(float.NaN, 0f), 1f, RouteThreatKind.MobileUnit, 1f),
+    "NaN threat position was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RouteThreatSource("infinite-position", "red", new WorldPoint(0f, float.PositiveInfinity), 1f, RouteThreatKind.MobileUnit, 1f),
+    "Infinite threat position was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("zero-radius", "red", new WorldPoint(0f, 0f), 0f, RouteThreatKind.MobileUnit, 1f),
+    "Zero threat radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("negative-radius", "red", new WorldPoint(0f, 0f), -1f, RouteThreatKind.MobileUnit, 1f),
+    "Negative threat radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("nan-radius", "red", new WorldPoint(0f, 0f), float.NaN, RouteThreatKind.MobileUnit, 1f),
+    "NaN threat radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("infinite-radius", "red", new WorldPoint(0f, 0f), float.PositiveInfinity, RouteThreatKind.MobileUnit, 1f),
+    "Infinite threat radius was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("negative-weight", "red", new WorldPoint(0f, 0f), 1f, RouteThreatKind.MobileUnit, -1f),
+    "Negative threat weight was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("nan-weight", "red", new WorldPoint(0f, 0f), 1f, RouteThreatKind.MobileUnit, float.NaN),
+    "NaN threat weight was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("infinite-weight", "red", new WorldPoint(0f, 0f), 1f, RouteThreatKind.MobileUnit, float.PositiveInfinity),
+    "Infinite threat weight was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RouteThreatSource("invalid-kind", "red", new WorldPoint(0f, 0f), 1f, (RouteThreatKind)99, 1f),
+    "Unknown threat kind was accepted.");
+
+var balancedRouteProfile = new RoutePlanningProfile(1d, 15d);
+Expect(balancedRouteProfile.TravelTimeWeight == 1d, "Travel-time planning weight was not retained.");
+Expect(balancedRouteProfile.ThreatWeight == 15d, "Threat planning weight was not retained.");
+Expect(balancedRouteProfile.Score(10d, 1d) == 25d, "Route planning score was incorrect.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoutePlanningProfile(double.NaN, 1d),
+    "NaN travel-time weight was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoutePlanningProfile(1d, double.PositiveInfinity),
+    "Infinite threat planning weight was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new RoutePlanningProfile(-1d, 1d),
+    "Negative travel-time weight was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new RoutePlanningProfile(0d, 0d),
+    "Zero-only route planning profile was accepted.");
+
+var routeThreatSource = new WorldPoint(0f, 0f);
+var routeThreatNorthJunction = new WorldPoint(40f, 0f);
+var routeThreatSouthStart = new WorldPoint(0f, 50f);
+var routeThreatSouthEnd = new WorldPoint(100f, 50f);
+var routeThreatDestination = new WorldPoint(100f, 0f);
+var alternateThreatRoads = new RoadNetwork();
+alternateThreatRoads.Register(new RoadSegment(
+    "threat-north-a",
+    routeThreatSource,
+    routeThreatNorthJunction,
+    4f,
+    new[] { "production-rear", "production-middle" }));
+alternateThreatRoads.Register(new RoadSegment(
+    "threat-north-b",
+    routeThreatNorthJunction,
+    routeThreatDestination,
+    4f,
+    new[] { "production-middle", "production-front" }));
+alternateThreatRoads.Register(new RoadSegment(
+    "threat-south-a",
+    routeThreatSource,
+    routeThreatSouthStart,
+    4f,
+    new[] { "production-rear", "production-middle" }));
+alternateThreatRoads.Register(new RoadSegment(
+    "threat-south-b",
+    routeThreatSouthStart,
+    routeThreatSouthEnd,
+    4f,
+    new[] { "production-middle" }));
+alternateThreatRoads.Register(new RoadSegment(
+    "threat-south-c",
+    routeThreatSouthEnd,
+    routeThreatDestination,
+    4f,
+    new[] { "production-middle", "production-front" }));
+var alternatePaths = alternateThreatRoads.FindPaths(routeThreatSource, routeThreatDestination);
+Expect(alternatePaths.Count == 2, "Road network did not expose both route candidates.");
+Expect(alternatePaths[0].Count == 2, "Shortest North route was not the first candidate.");
+Expect(alternatePaths[1].Count == 3, "Longer South route was not retained as an alternate.");
+var alternateThreatPlanner = new ReinforcementRoutePlanner(
+    alternateThreatRoads,
+    new RoadMovementProfile(1f),
+    new RectangularTerrainMovementResolver(new TerrainMovementProfile("Open", 1f)));
+var routeThreatRequest = new ReinforcementDispatchRequest(
+    "route-threat-request",
+    "blue",
+    "production-rear",
+    routeThreatSource,
+    "production-front",
+    routeThreatDestination,
+    10f);
+var defaultThreatRoute = alternateThreatPlanner.Plan(routeThreatRequest);
+Expect(defaultThreatRoute.TotalDistance == 100f, "Threat-free default did not preserve the shortest Road route.");
+var noThreatAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    Array.Empty<RouteThreatSource>());
+Expect(noThreatAssessment.TotalThreat == 0d, "Empty threat input produced threat score.");
+Expect(!noThreatAssessment.HasThreat, "Empty threat input reported a threat.");
+Expect(noThreatAssessment.ThreatSourceCount == 0, "Empty threat input reported source count.");
+Expect(!noThreatAssessment.HasFortifiedThreat, "Empty threat input reported fortified threat.");
+
+var friendlyThreat = new RouteThreatSource(
+    "friendly-threat",
+    "blue",
+    new WorldPoint(50f, 0f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    5f);
+var friendlyAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { friendlyThreat });
+Expect(!friendlyAssessment.HasThreat && friendlyAssessment.TotalThreat == 0d, "Friendly route source counted as a threat.");
+var outsideThreat = new RouteThreatSource(
+    "outside-threat",
+    "red",
+    new WorldPoint(50f, 11f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    1f);
+var outsideAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { outsideThreat });
+Expect(!outsideAssessment.HasThreat, "Source outside its threat radius affected the route.");
+var boundaryThreat = new RouteThreatSource(
+    "boundary-threat",
+    "red",
+    new WorldPoint(50f, 10f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    1f);
+var boundaryAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { boundaryThreat });
+Expect(boundaryAssessment.HasThreat, "Source on the threat radius boundary was ignored.");
+var mobileAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { mobileThreat });
+Expect(mobileAssessment.HasThreat, "Enemy mobile source did not threaten the route.");
+Expect(mobileAssessment.TotalThreat == 1d, "Enemy mobile threat weight was incorrect.");
+Expect(mobileAssessment.ThreatSourceCount == 1, "Enemy mobile threat count was incorrect.");
+Expect(!mobileAssessment.HasFortifiedThreat, "Mobile threat was reported as fortified.");
+var fortifiedAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { fortifiedThreat });
+Expect(fortifiedAssessment.HasFortifiedThreat, "Fortified route threat was not identified.");
+Expect(fortifiedAssessment.TotalThreat == 2.5d, "Fortified route threat weight was incorrect.");
+var secondMobileThreat = new RouteThreatSource(
+    "mobile-threat-north-b",
+    "red",
+    new WorldPoint(70f, -3f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    0.75f);
+var multipleAssessment = RouteThreatResolver.Resolve(
+    "blue",
+    defaultThreatRoute,
+    new[] { mobileThreat, secondMobileThreat });
+Expect(multipleAssessment.ThreatSourceCount == 2, "Multiple threats did not accumulate source count.");
+Expect(multipleAssessment.TotalThreat == 1.75d, "Multiple threats did not accumulate score.");
+ExpectThrows<ArgumentException>(
+    () => RouteThreatResolver.Resolve("blue", defaultThreatRoute, new[] { mobileThreat, mobileThreat }),
+    "Duplicate threat source ids were accepted.");
+
+var safeAlternateRoute = alternateThreatPlanner.Plan(
+    routeThreatRequest,
+    new[] { mobileThreat },
+    balancedRouteProfile,
+    out var safeAlternateAssessment);
+Expect(safeAlternateRoute.TotalDistance == 200f, "Safe South alternate was not selected over threatened North.");
+Expect(!safeAlternateAssessment.HasThreat, "Selected safe alternate retained North threat.");
+Expect(safeAlternateRoute.Legs.Any(leg => leg.Start.Z == 50f || leg.End.Z == 50f), "Selected alternate did not traverse the South route.");
+var weakThreat = new RouteThreatSource(
+    "weak-mobile-threat",
+    "red",
+    new WorldPoint(50f, 4f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    0.1f);
+var fastThreatenedRoute = alternateThreatPlanner.Plan(
+    routeThreatRequest,
+    new[] { weakThreat },
+    balancedRouteProfile,
+    out var fastThreatenedAssessment);
+Expect(fastThreatenedRoute.TotalDistance == 100f, "Weak threat hard-coded an unnecessary detour.");
+Expect(fastThreatenedAssessment.HasThreat, "Weak threat disappeared from selected route assessment.");
+var strongAlternateRoute = alternateThreatPlanner.Plan(
+    routeThreatRequest,
+    new[] { fortifiedThreat },
+    balancedRouteProfile,
+    out var strongAlternateAssessment);
+Expect(strongAlternateRoute.TotalDistance == 200f, "Safe South route was not selected over fortified North.");
+Expect(!strongAlternateAssessment.HasThreat, "Fortified North threat leaked into South assessment.");
+
+var southThreat = new RouteThreatSource(
+    "mobile-threat-south",
+    "red",
+    new WorldPoint(50f, 50f),
+    10f,
+    RouteThreatKind.MobileUnit,
+    0.5f);
+var allThreatenedRoute = alternateThreatPlanner.Plan(
+    routeThreatRequest,
+    new[] { mobileThreat, southThreat },
+    balancedRouteProfile,
+    out var allThreatenedAssessment);
+Expect(allThreatenedRoute.TotalDistance == 100f, "All-threatened route selection did not choose the best score.");
+Expect(allThreatenedAssessment.HasThreat, "All-threatened selection lost its threat assessment.");
+
+var northOnlyRoads = new RoadNetwork();
+northOnlyRoads.Register(new RoadSegment(
+    "only-north-a",
+    routeThreatSource,
+    routeThreatNorthJunction,
+    4f,
+    new[] { "production-rear", "production-middle" }));
+northOnlyRoads.Register(new RoadSegment(
+    "only-north-b",
+    routeThreatNorthJunction,
+    routeThreatDestination,
+    4f,
+    new[] { "production-middle", "production-front" }));
+var northOnlyPlanner = new ReinforcementRoutePlanner(
+    northOnlyRoads,
+    new RoadMovementProfile(1f),
+    new RectangularTerrainMovementResolver(new TerrainMovementProfile("Open", 1f)));
+var threatDispatches = new List<ReinforcementTransit>();
+var onlyThreatenedDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest(
+        "only-threatened-dispatch",
+        "blue",
+        "production-rear",
+        routeThreatSource,
+        "production-front",
+        routeThreatDestination,
+        10f),
+    productionTerritory,
+    productionSuppliedSnapshot,
+    northOnlyPlanner,
+    new[] { mobileThreat },
+    balancedRouteProfile,
+    threatDispatches);
+Expect(onlyThreatenedDispatch.Success, "Only threatened route was treated as impassable.");
+Expect(onlyThreatenedDispatch.Transit!.State == ReinforcementState.EnRoute, "Threatened route did not create an EnRoute transit.");
+Expect(onlyThreatenedDispatch.Transit.RouteThreatAssessment.HasThreat, "Transit did not preserve its route threat snapshot.");
+Expect(onlyThreatenedDispatch.Transit.Route.TotalDistance == 100f, "Only threatened route selected another path.");
+var onlyFortifiedDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest(
+        "only-fortified-dispatch",
+        "blue",
+        "production-rear",
+        routeThreatSource,
+        "production-front",
+        routeThreatDestination,
+        10f),
+    productionTerritory,
+    productionSuppliedSnapshot,
+    northOnlyPlanner,
+    new[] { fortifiedThreat },
+    balancedRouteProfile,
+    threatDispatches);
+Expect(onlyFortifiedDispatch.Success, "Only fortified route was treated as impassable.");
+Expect(onlyFortifiedDispatch.Transit!.RouteThreatAssessment.HasFortifiedThreat, "Fortified dispatch lost its strong-threat snapshot.");
+Expect(productionSuppliedSnapshot.GetStatus("production-front") == SectorSupplyStatus.Supplied, "Route threat changed Strategic Supply status.");
+Expect(productionMiddleSector.OwnerId == "blue", "Enemy presence changed Sector ownership without Capture.");
+
+var noRoadThreatPlanner = new ReinforcementRoutePlanner(
+    new RoadNetwork(),
+    new RoadMovementProfile(1f),
+    new RectangularTerrainMovementResolver(new TerrainMovementProfile("Open", 0.8f)));
+var noRoadThreatDispatch = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest(
+        "no-road-threat-dispatch",
+        "blue",
+        "production-rear",
+        routeThreatSource,
+        "production-front",
+        routeThreatDestination,
+        10f),
+    productionTerritory,
+    productionSuppliedSnapshot,
+    noRoadThreatPlanner,
+    new[] { mobileThreat },
+    balancedRouteProfile,
+    threatDispatches);
+Expect(noRoadThreatDispatch.Success, "Missing Road was treated as Strategic Isolation.");
+Expect(noRoadThreatDispatch.Transit!.Route.Legs.Count == 1, "Offroad fallback did not produce one direct leg.");
+Expect(noRoadThreatDispatch.Transit.Route.Legs[0].Surface == ReinforcementRouteSurface.Offroad, "Missing Road did not use Offroad fallback.");
+Expect(noRoadThreatDispatch.Transit.RouteThreatAssessment.HasThreat, "Threatened Offroad route lost its assessment.");
+
+var threatReadyEconomy = new EconomyState("blue", 100);
+var threatReadyQueues = new List<ProductionQueue>();
+var threatReady = new List<ReadyReinforcement>();
+var threatReadyEnqueue = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-threat", "produced-reinforcement-threat"),
+    productionTerritory,
+    threatReadyEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    threatReadyQueues,
+    threatReady);
+Expect(threatReadyEnqueue.Success, "Threat-aware Ready fixture did not enqueue.");
+ProductionAdvanceService.Advance(threatReadyQueues[0], blueBarracks, 12f, threatReady);
+Expect(threatReady.Count == 1, "Threat-aware Ready fixture did not complete.");
+var threatReadyId = threatReady[0].ReinforcementId;
+var productionRouteThreat = new RouteThreatSource(
+    "production-route-threat",
+    "red",
+    new WorldPoint(60f, 24f),
+    12f,
+    RouteThreatKind.MobileUnit,
+    1f);
+productionMiddleSector.TransferOwnershipTo("red");
+var productionIsolationSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+Expect(productionIsolationSnapshot.GetStatus("production-front") == SectorSupplyStatus.CutOff, "Missing owned Territory path did not produce technical CutOff.");
+var isolatedThreatReadyDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    threatReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionIsolationSnapshot,
+    productionRoadPlanner,
+    new[] { productionRouteThreat },
+    balancedRouteProfile,
+    threatReady,
+    producedTransits);
+Expect(!isolatedThreatReadyDispatch.Success, "Strategically isolated destination accepted a new Dispatch.");
+Expect(isolatedThreatReadyDispatch.DispatchFailureReason == ReinforcementDispatchFailureReason.DestinationCutOff, "Strategic Isolation returned the wrong dispatch failure.");
+Expect(threatReady.Count == 1 && threatReady[0].ReinforcementId == threatReadyId, "Strategic Isolation removed or replaced Ready reinforcement.");
+productionMiddleSector.TransferOwnershipTo("blue");
+var productionThreatRestoredSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+var mutableProductionThreats = new List<RouteThreatSource> { productionRouteThreat };
+var restoredThreatReadyDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    threatReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionThreatRestoredSnapshot,
+    productionRoadPlanner,
+    mutableProductionThreats,
+    balancedRouteProfile,
+    threatReady,
+    producedTransits);
+Expect(restoredThreatReadyDispatch.Success, "Restored Strategic connection did not dispatch threatened Ready reinforcement.");
+Expect(restoredThreatReadyDispatch.Transit!.ReinforcementId == threatReadyId, "Restored threat-aware Dispatch changed Ready id.");
+Expect(threatReady.Count == 0, "Successful threat-aware Dispatch left Ready reinforcement behind.");
+Expect(restoredThreatReadyDispatch.Transit.RouteThreatAssessment.HasThreat, "Production integration lost route threat assessment.");
+mutableProductionThreats.Clear();
+Expect(restoredThreatReadyDispatch.Transit.RouteThreatAssessment.HasThreat, "Past Dispatch threat snapshot changed after source collection mutation.");
+var routeBeforeIsolation = restoredThreatReadyDispatch.Transit.Route;
+productionMiddleSector.TransferOwnershipTo("red");
+_ = StrategicSupplyResolver.Resolve(productionTerritory, "blue", new[] { productionSupplySource });
+Expect(restoredThreatReadyDispatch.Transit.State == ReinforcementState.EnRoute, "Strategic Isolation deleted or stopped an existing transit.");
+Expect(ReferenceEquals(routeBeforeIsolation, restoredThreatReadyDispatch.Transit.Route), "Existing transit dynamically rerouted after Dispatch.");
+productionMiddleSector.TransferOwnershipTo("blue");
+restoredThreatReadyDispatch.Transit.MarkDestroyedEnRoute();
+Expect(restoredThreatReadyDispatch.Transit.State == ReinforcementState.DestroyedEnRoute, "Physical interdiction did not retain DestroyedEnRoute meaning.");
+var postInterdictionSupply = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+Expect(postInterdictionSupply.GetStatus("production-front") == SectorSupplyStatus.Supplied, "DestroyedEnRoute changed Strategic Supply connectivity.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver

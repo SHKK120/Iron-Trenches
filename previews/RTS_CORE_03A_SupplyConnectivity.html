@@ -247,7 +247,7 @@
     const state = { owners: {}, selected: null, events: [] };
 
     function factionName(id) { return id === "Blue" ? "청군" : id === "Red" ? "적군" : id; }
-    function statusName(status) { return status === "Supplied" ? "보급 연결" : status === "CutOff" ? "보급 차단" : "비소유"; }
+      function statusName(status) { return status === "Supplied" ? "보급 연결" : status === "CutOff" ? "완전 고립" : "비소유"; }
     function edgeKey(first, second) { return [first, second].sort().join("|"); }
     function edgeName(edge) { return `${sectors[edge[0]].name}–${sectors[edge[1]].name}`; }
 
@@ -323,7 +323,7 @@
       const result = captureSector("south", "Red");
       if (!result.changed) return result;
       const supply = resolveSupply();
-      state.events.unshift("전방 보급창도 동부 지역을 통해 보급 차단 상태를 공유");
+        state.events.unshift("전방 보급창도 동부 지역을 통해 완전 고립 상태를 공유");
       state.events.unshift("동부는 청군 소유를 유지하지만 모든 후방 연결이 끊겨 고립");
       state.events.unshift("적군이 남부 점령: 남부 우회 경로 차단");
       if (supply.statuses.east !== "CutOff") throw new Error("모든 경로 차단 뒤 동부가 고립되지 않았습니다");

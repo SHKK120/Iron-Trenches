@@ -12,6 +12,54 @@ namespace IronTrenches.Core
             ReinforcementRoutePlanner routePlanner,
             ICollection<ReinforcementTransit> existingTransits)
         {
+            return DispatchInternal(
+                request,
+                territory,
+                supplySnapshot,
+                routePlanner,
+                null,
+                null,
+                existingTransits);
+        }
+
+        public static ReinforcementDispatchResult Dispatch(
+            ReinforcementDispatchRequest request,
+            TerritoryGraph territory,
+            SupplyNetworkSnapshot supplySnapshot,
+            ReinforcementRoutePlanner routePlanner,
+            IEnumerable<RouteThreatSource> threatSources,
+            RoutePlanningProfile planningProfile,
+            ICollection<ReinforcementTransit> existingTransits)
+        {
+            if (threatSources == null)
+            {
+                throw new ArgumentNullException(nameof(threatSources));
+            }
+
+            if (planningProfile == null)
+            {
+                throw new ArgumentNullException(nameof(planningProfile));
+            }
+
+            return DispatchInternal(
+                request,
+                territory,
+                supplySnapshot,
+                routePlanner,
+                threatSources,
+                planningProfile,
+                existingTransits);
+        }
+
+        private static ReinforcementDispatchResult DispatchInternal(
+            ReinforcementDispatchRequest request,
+            TerritoryGraph territory,
+            SupplyNetworkSnapshot supplySnapshot,
+            ReinforcementRoutePlanner routePlanner,
+            IEnumerable<RouteThreatSource>? threatSources,
+            RoutePlanningProfile? planningProfile,
+            ICollection<ReinforcementTransit> existingTransits)
+        {
             if (request == null)
             {
                 throw new ArgumentNullException(nameof(request));
@@ -96,7 +144,26 @@ namespace IronTrenches.Core
                     ReinforcementDispatchFailureReason.DestinationCutOff);
             }
 
-            var transitToAdd = new ReinforcementTransit(request, routePlanner.Plan(request));
+            ReinforcementRoutePlan route;
+            RouteThreatAssessment routeThreatAssessment;
+            if (threatSources == null)
+            {
+                route = routePlanner.Plan(request);
+                routeThreatAssessment = RouteThreatAssessment.Empty;
+            }
+            else
+            {
+                route = routePlanner.Plan(
+                    request,
+                    threatSources,
+                    planningProfile!,
+                    out routeThreatAssessment);
+            }
+
+            var transitToAdd = new ReinforcementTransit(
+                request,
+                route,
+                routeThreatAssessment);
             existingTransits.Add(transitToAdd);
             return ReinforcementDispatchResult.Succeeded(transitToAdd);
         }

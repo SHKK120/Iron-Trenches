@@ -14,6 +14,62 @@ namespace IronTrenches.Core
             ICollection<ReadyReinforcement> readyReinforcements,
             ICollection<ReinforcementTransit> existingTransits)
         {
+            return DispatchInternal(
+                reinforcement,
+                completedBuildings,
+                territory,
+                supplySnapshot,
+                routePlanner,
+                null,
+                null,
+                readyReinforcements,
+                existingTransits);
+        }
+
+        public static ProductionReinforcementIntegrationResult Dispatch(
+            ReadyReinforcement reinforcement,
+            IEnumerable<BuildingState> completedBuildings,
+            TerritoryGraph territory,
+            SupplyNetworkSnapshot supplySnapshot,
+            ReinforcementRoutePlanner routePlanner,
+            IEnumerable<RouteThreatSource> threatSources,
+            RoutePlanningProfile planningProfile,
+            ICollection<ReadyReinforcement> readyReinforcements,
+            ICollection<ReinforcementTransit> existingTransits)
+        {
+            if (threatSources == null)
+            {
+                throw new ArgumentNullException(nameof(threatSources));
+            }
+
+            if (planningProfile == null)
+            {
+                throw new ArgumentNullException(nameof(planningProfile));
+            }
+
+            return DispatchInternal(
+                reinforcement,
+                completedBuildings,
+                territory,
+                supplySnapshot,
+                routePlanner,
+                threatSources,
+                planningProfile,
+                readyReinforcements,
+                existingTransits);
+        }
+
+        private static ProductionReinforcementIntegrationResult DispatchInternal(
+            ReadyReinforcement reinforcement,
+            IEnumerable<BuildingState> completedBuildings,
+            TerritoryGraph territory,
+            SupplyNetworkSnapshot supplySnapshot,
+            ReinforcementRoutePlanner routePlanner,
+            IEnumerable<RouteThreatSource>? threatSources,
+            RoutePlanningProfile? planningProfile,
+            ICollection<ReadyReinforcement> readyReinforcements,
+            ICollection<ReinforcementTransit> existingTransits)
+        {
             if (reinforcement == null)
             {
                 throw new ArgumentNullException(nameof(reinforcement));
@@ -81,19 +137,29 @@ namespace IronTrenches.Core
                     ProductionReinforcementIntegrationFailureReason.SourcePositionChanged);
             }
 
-            var dispatch = ReinforcementDispatchService.Dispatch(
-                new ReinforcementDispatchRequest(
-                    ready.ReinforcementId,
-                    ready.FactionId,
-                    ready.SourceSectorId,
-                    ready.SourcePosition,
-                    ready.DestinationSectorId,
-                    ready.DestinationPosition,
-                    ready.BaseMovementSpeed),
-                territory,
-                supplySnapshot,
-                routePlanner,
-                existingTransits);
+            var request = new ReinforcementDispatchRequest(
+                ready.ReinforcementId,
+                ready.FactionId,
+                ready.SourceSectorId,
+                ready.SourcePosition,
+                ready.DestinationSectorId,
+                ready.DestinationPosition,
+                ready.BaseMovementSpeed);
+            var dispatch = threatSources == null
+                ? ReinforcementDispatchService.Dispatch(
+                    request,
+                    territory,
+                    supplySnapshot,
+                    routePlanner,
+                    existingTransits)
+                : ReinforcementDispatchService.Dispatch(
+                    request,
+                    territory,
+                    supplySnapshot,
+                    routePlanner,
+                    threatSources,
+                    planningProfile!,
+                    existingTransits);
             if (!dispatch.Success)
             {
                 return ProductionReinforcementIntegrationResult.Failed(

@@ -16,6 +16,14 @@ namespace IronTrenches.Core
         internal ReinforcementTransit(
             ReinforcementDispatchRequest request,
             ReinforcementRoutePlan route)
+            : this(request, route, RouteThreatAssessment.Empty)
+        {
+        }
+
+        internal ReinforcementTransit(
+            ReinforcementDispatchRequest request,
+            ReinforcementRoutePlan route,
+            RouteThreatAssessment routeThreatAssessment)
         {
             if (request == null)
             {
@@ -23,6 +31,8 @@ namespace IronTrenches.Core
             }
 
             Route = route ?? throw new ArgumentNullException(nameof(route));
+            RouteThreatAssessment = routeThreatAssessment
+                ?? throw new ArgumentNullException(nameof(routeThreatAssessment));
             ReinforcementId = request.ReinforcementId;
             FactionId = request.FactionId;
             BaseMovementSpeed = request.BaseMovementSpeed;
@@ -38,6 +48,8 @@ namespace IronTrenches.Core
         public float BaseMovementSpeed { get; }
 
         public ReinforcementRoutePlan Route { get; }
+
+        public RouteThreatAssessment RouteThreatAssessment { get; }
 
         public ReinforcementState State { get; private set; }
 
