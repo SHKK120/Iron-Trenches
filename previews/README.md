@@ -3,14 +3,25 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_PLAYTEST_03A_SupplyStrategy.html`: 현재 보급 차단 전략 Gameplay Microgame
+- `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`: 현재 Terrain + Road + Physical Reinforcement Gameplay Microgame
+- `RTS_PLAYTEST_03A_SupplyStrategy.html`: `[대체됨 — R1]` 단순 보급 차단 Gameplay Microgame
 - `RTS_CORE_03A_SupplyConnectivity.html`: 완료된 전략 보급 규칙/연결 판독 Preview
 - `RTS_CORE_02C_ConstructionOwnership.html`: 완료된 건설 완공 + 일반 건물 지역 소유권 Preview
 - `RTS_CORE_02B_FreeConstruction.html`: 완료된 Sector-Scoped Free Construction Preview
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## RTS-PLAYTEST-03A 현재 시나리오
+## RTS-PLAYTEST-03A-R1 현재 시나리오
+
+- Open Ground, Forest, Rocky Ground, Mud와 Road Overlay에서 현재 위치 기반 이동 배율 적용
+- Road는 1.40x 이동 보너스를 주지만 자체 Cover/Concealment가 없는 `[현재 방향]`을 표현
+- 자유 Road Segment: 도로 건설 → 아군 시작점 → 아군 끝점 → Validation → 확정; 고정 Slot 없음
+- Red Reinforcement는 Rear에서 실제 Squad로 Spawn해 활성 North/South Road waypoint를 따라 Front로 이동
+- Strategic Connection이 남아 있어도 이동 중 증원을 공격하면 `INTERDICTED`; Corridor 두 곳을 점령해야 `CUT OFF`
+- Spawned / Reached Front / Destroyed En Route 통계를 분리하고, 출발한 증원은 Cut Off 때 삭제·Teleport하지 않음
+- Blue가 점령한 Corridor로 Road를 연장해 실제 분대 재배치 속도를 시험 가능
+
+## `[대체됨 — R1]` RTS-PLAYTEST-03A 시나리오
 
 - 청군 5개 Squad Token을 클릭/드래그/Shift로 선택하고 우클릭 이동 또는 공격 이동
 - 적 전방을 바로 공격하는 정면 돌파와 북부·남부 보급로 점령 후 공격을 모두 허용
@@ -32,10 +43,12 @@
 
 - 순수 C# Core와 `ManagedPcChecks`가 기술 정본이다.
 - `RTS_CORE_03A_SupplyConnectivity.html`은 Supply 규칙과 연결 판독용 Preview다.
-- `RTS_PLAYTEST_03A_SupplyStrategy.html`은 보급 차단 전략의 실제 RTS 조작/재미 검증용 비정본 Gameplay Validation Layer다.
+- `RTS_PLAYTEST_03A_SupplyStrategy.html`은 단순 Supply Cut을 시험했던 이전 비정본 Gameplay Layer다.
+- `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`은 Terrain, Road Infrastructure, 실제 Reinforcement 이동·요격과 Strategic Cut Off를 함께 검증하는 현재 비정본 Gameplay Layer다.
 - Browser Preview와 Microgame은 사람의 조작·가독성·플레이 감각 확인용 표현 계층이다.
 - 보급 연결은 현재 소유권·인접 관계·보급원에서 파생하며 Preview JavaScript를 기술 정본으로 사용하지 않는다.
 - Microgame의 `Cut Off = 적 전방 Reinforcement 중단`은 사람 Playtest 전용 `[시험 규칙]`이며 C# Core나 최종 보급 규칙이 아니다.
+- R1의 Terrain 배율, Forest/Rocky 전투 보조, 무료·즉시 Road 건설과 Reinforcement 수치는 모두 `[시험값/시험 규칙]`이며 C# 구현 사실이 아니다.
 - 사용자 화면 문구는 한글을 기본으로 하고, 코드 식별자와 Result Bundle 번호만 필요한 범위에서 영어를 유지한다.
 - 사각형 Sector와 원형 Footprint는 Preview/검증용 시험 표현이며 최종 맵 Geometry나 Collider 확정이 아니다.
 - Preview PASS는 Unity Compile, Scene, 입력, 물리, 렌더링 또는 Play Mode PASS를 뜻하지 않는다.
