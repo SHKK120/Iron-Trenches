@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iron &amp; Trenches — 보급 전략 마이크로게임</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #060906;
+      color: #f3eedc;
+      --ink: #f3eedc;
+      --muted: #98a393;
+      --panel: rgba(14, 20, 15, 0.97);
+      --line: #3d483e;
+      --gold: #e8c65e;
+      --blue: #57b9ee;
+      --red: #e36e64;
+      --supply: #66e397;
+      --cutoff: #ff9a50;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(rgba(222, 199, 118, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(222, 199, 118, 0.025) 1px, transparent 1px),
+        radial-gradient(circle at 48% 0, #2c3528, #101510 46%, #050705 88%);
+      background-size: 28px 28px, 28px 28px, auto;
+    }
+    button { font: inherit; }
+    main { width: min(1600px, calc(100% - 24px)); margin: 12px auto 20px; }
+    header { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(540px, 1.25fr); gap: 16px; align-items: end; }
+    .eyebrow { margin: 0 0 6px; color: var(--gold); font-size: 0.69rem; font-weight: 950; letter-spacing: 0.16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.65rem); line-height: 1.05; }
+    .lead { max-width: 760px; margin: 8px 0 0; color: #bac4b5; font-size: 0.84rem; line-height: 1.55; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .badge { padding: 5px 8px; border: 1px solid #596258; border-radius: 999px; color: #cbd2c6; background: #151c16; font-size: 0.63rem; font-weight: 850; letter-spacing: 0.05em; }
+    .badge.warn { border-color: #8c6938; color: #ffd58d; }
+    .hud { display: grid; grid-template-columns: repeat(6, minmax(92px, 1fr)); gap: 7px; }
+    .hud-card { min-height: 58px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: #0c120d; }
+    .hud-card span { display: block; color: #7f8b7e; font-size: 0.58rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
+    .hud-card strong { display: block; margin-top: 4px; font-size: 0.96rem; color: #e4e9df; }
+    .hud-card strong.good { color: var(--supply); }
+    .hud-card strong.warn { color: var(--cutoff); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; margin-top: 12px; }
+    .battle-wrap, .side { border: 1px solid #465047; border-radius: 14px; background: var(--panel); box-shadow: 0 22px 60px rgba(0,0,0,.35); }
+    .battle-wrap { position: relative; overflow: hidden; }
+    .battle-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 9px; border-bottom: 1px solid #354036; }
+    .command { padding: 8px 11px; border: 1px solid #647064; border-radius: 7px; color: #f5f0df; background: #293229; cursor: pointer; font-weight: 850; font-size: 0.74rem; }
+    .command:hover, .command:focus-visible { outline: none; border-color: var(--gold); filter: brightness(1.12); }
+    .command.active { border-color: var(--gold); color: #fff1ad; background: #5c4f22; box-shadow: 0 0 0 1px rgba(232,198,94,.2); }
+    .command.danger { border-color: #a5524d; background: #5b2825; }
+    .toolbar-hint { margin-left: auto; color: #899589; font-size: 0.68rem; }
+    .canvas-shell { position: relative; aspect-ratio: 16 / 9; min-height: 480px; background: #0b100c; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+    .objective-ribbon { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(580px, calc(100% - 30px)); padding: 8px 12px; border: 1px solid rgba(232,198,94,.55); border-radius: 9px; background: rgba(8,12,9,.88); color: #ded8bb; font-size: 0.7rem; text-align: center; pointer-events: none; }
+    .objective-ribbon strong { color: #ffe889; }
+    .pause-screen { position: absolute; inset: 0; display: none; place-items: center; background: rgba(4,7,5,.56); color: #fff0ad; font-size: 2rem; font-weight: 950; letter-spacing: .12em; pointer-events: none; }
+    .pause-screen.visible { display: grid; }
+    .side { display: flex; flex-direction: column; gap: 9px; padding: 11px; }
+    .box { padding: 11px; border: 1px solid #354037; border-radius: 9px; background: #090e0a; }
+    .box h2 { margin: 0 0 7px; color: #dfe5d9; font-size: 0.83rem; }
+    .objective { color: #b8c2b5; font-size: 0.72rem; line-height: 1.5; }
+    .objective b { color: #f5da78; }
+    .supply-state { display: grid; gap: 7px; }
+    .supply-row { display: flex; justify-content: space-between; gap: 12px; color: #9eaa9c; font-size: 0.7rem; }
+    .supply-row strong { color: #dce5d9; text-align: right; }
+    .supply-row strong.good { color: var(--supply); }
+    .supply-row strong.warn { color: var(--cutoff); }
+    .selection-list { display: grid; gap: 5px; min-height: 38px; color: #aeb8ab; font-size: 0.69rem; line-height: 1.4; }
+    .selection-list .unit-line { display: grid; grid-template-columns: 1fr 86px; gap: 8px; align-items: center; }
+    .mini-hp { height: 6px; border-radius: 99px; background: #222b23; overflow: hidden; }
+    .mini-hp i { display: block; height: 100%; background: var(--blue); }
+    .log { min-height: 115px; max-height: 170px; margin: 0; padding-left: 20px; overflow: auto; color: #98a397; font-size: 0.66rem; line-height: 1.45; }
+    .log li + li { margin-top: 4px; }
+    .trial-note { color: #aa9c77; font-size: 0.65rem; line-height: 1.48; }
+    .result { display: none; position: absolute; inset: 8% 12%; z-index: 4; overflow: auto; padding: 20px; border: 1px solid #8b783b; border-radius: 13px; background: rgba(10,15,11,.97); box-shadow: 0 28px 90px rgba(0,0,0,.65); }
+    .result.visible { display: block; }
+    .result h2 { margin: 0; color: #f6dd7f; font-size: clamp(1.5rem, 4vw, 2.5rem); }
+    .result p { color: #acb7aa; font-size: .76rem; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 14px 0; }
+    .stat { padding: 10px; border: 1px solid #3f493f; border-radius: 8px; background: #0c120d; }
+    .stat span { display: block; color: #7e8b7e; font-size: .58rem; text-transform: uppercase; }
+    .stat strong { display: block; margin-top: 4px; color: #e8ebdf; font-size: .9rem; }
+    .result-actions { display: flex; gap: 8px; }
+    footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 9px; color: #758176; font-size: .63rem; }
+    @media (max-width: 1180px) { header { grid-template-columns: 1fr; } .layout { grid-template-columns: 1fr; } .side { display: grid; grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 720px) { .hud { grid-template-columns: repeat(3, 1fr); } .side { grid-template-columns: 1fr; } .toolbar-hint { width: 100%; margin-left: 0; } .canvas-shell { min-height: 390px; } .stats { grid-template-columns: 1fr 1fr; } footer { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Iron &amp; Trenches · Supply Strategy Microgame</p>
+        <h1>정면 돌파인가, 보급 차단인가</h1>
+        <p class="lead">분대를 직접 선택하고 이동·전투·점령하세요. 적 전방은 두 보급로 중 하나만 살아 있어도 증원을 받습니다. 두 경로를 모두 끊으면 기존 적은 계속 싸우지만 새 증원은 멈춥니다.</p>
+        <div class="badges">
+          <span class="badge">Browser Gameplay Test</span>
+          <span class="badge">Not Unity Runtime</span>
+          <span class="badge">Not Source of Truth</span>
+          <span class="badge warn">Trial Rules / Trial Values</span>
+        </div>
+      </div>
+      <section class="hud" aria-label="전투 상태">
+        <div class="hud-card"><span>청군 분대</span><strong id="blue-alive">5</strong></div>
+        <div class="hud-card"><span>적군 분대</span><strong id="red-alive">5</strong></div>
+        <div class="hud-card"><span>적 전방 보급</span><strong id="front-supply" class="good">보급 연결</strong></div>
+        <div class="hud-card"><span>적 증원</span><strong id="reinforcement-state" class="good">가동</strong></div>
+        <div class="hud-card"><span>선택 분대</span><strong id="selected-count">0</strong></div>
+        <div class="hud-card"><span>플레이 시간</span><strong id="play-time">00:00</strong></div>
+      </section>
+    </header>
+
+    <div class="layout">
+      <section class="battle-wrap" aria-label="보급 전략 전장">
+        <div class="battle-toolbar">
+          <button class="command" id="move-mode" type="button">이동 명령 · M</button>
+          <button class="command" id="attack-mode" type="button">공격 이동 · A</button>
+          <button class="command" id="pause-game" type="button">일시정지 · P</button>
+          <button class="command danger" id="reset-game" type="button">다시 시작</button>
+          <span class="toolbar-hint">클릭/드래그 선택 · Shift 추가 · 우클릭 이동 · M/A 또는 버튼 후 좌클릭도 가능</span>
+        </div>
+        <div class="canvas-shell">
+          <canvas id="battlefield" width="1120" height="630" tabindex="0" aria-label="분대를 선택하고 명령하는 전장"></canvas>
+          <div class="objective-ribbon"><strong>목표:</strong> 적 전방 지휘 거점을 점령하십시오 · 정면 돌파 또는 북부/남부 보급로 차단 후 공격</div>
+          <div class="pause-screen" id="pause-screen">일시정지</div>
+          <section class="result" id="result-panel" aria-live="polite">
+            <h2 id="result-title">작전 결과</h2>
+            <p id="result-summary"></p>
+            <div class="stats" id="result-stats"></div>
+            <div class="result-actions"><button class="command active" id="retry-game" type="button">다시 시작</button></div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="box">
+          <h2>작전 목표</h2>
+          <div class="objective"><b>적 전방을 점령</b>하십시오. 바로 전선을 밀거나, 분대를 나눠 북부·남부 보급로를 먼저 점령할 수 있습니다. 어느 전략도 강제되지 않습니다.</div>
+        </section>
+        <section class="box supply-state">
+          <h2>실시간 보급 판독</h2>
+          <div class="supply-row"><span>북부 보급로</span><strong id="north-route">적군 통제</strong></div>
+          <div class="supply-row"><span>남부 보급로</span><strong id="south-route">적군 통제</strong></div>
+          <div class="supply-row"><span>적 전방 보급</span><strong id="supply-readout" class="good">SUPPLIED</strong></div>
+          <div class="supply-row"><span>다음 증원</span><strong id="next-reinforcement">00:18</strong></div>
+          <div class="supply-row"><span>도착한 적 증원</span><strong id="reinforcements-spawned">0</strong></div>
+        </section>
+        <section class="box">
+          <h2>선택 분대</h2>
+          <div class="selection-list" id="selection-list">청군 분대를 클릭하거나 드래그하세요.</div>
+        </section>
+        <section class="box">
+          <h2>전투 기록</h2>
+          <ol class="log" id="event-log" aria-live="polite"></ol>
+        </section>
+        <section class="box trial-note">
+          <b>[시험 규칙]</b> 보급 차단은 적 전방의 새 증원만 중단합니다. 기존 적 병력의 체력·공격력·이동력·소유권은 바뀌지 않습니다.<br><br>
+          <b>[시험값]</b> 이 Microgame의 전투·점령·증원 수치는 보급 전략 체감 확인용이며 최종 게임 밸런스가 아닙니다. 플레이어 보급은 이 시험에서 단순화했습니다.
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <span>한 판 목표 약 3~6분 · 1x 고정 · 외부 의존성 없음</span>
+      <span>Gameplay Validation Layer · C# Core와 ManagedPcChecks가 기술 정본</span>
+    </footer>
+  </main>
+
+  <script>
+    const PLAYTEST = Object.freeze({
+      width: 1120,
+      height: 630,
+      blueSquads: 5,
+      blueHp: 125,
+      redHp: 105,
+      blueSpeed: 58,
+      redSpeed: 48,
+      blueDamage: 15,
+      redDamage: 12,
+      attackRange: 58,
+      attackMoveAcquireRange: 118,
+      fireInterval: 0.78,
+      captureRadius: 60,
+      captureSeconds: 10,
+      reinforcementInterval: 18,
+      maxReinforcements: 5,
+      maxRedAlive: 8,
+      unitRadius: 13,
+      separationRadius: 28
+    });
+
+    const SECTORS = Object.freeze({
+      redRear: { name: "적 후방 보급", x: 560, y: 76, w: 230, h: 90, initialOwner: "Red" },
+      north: { name: "북부 보급로", x: 310, y: 235, w: 260, h: 145, initialOwner: "Red", anchor: { x: 310, y: 235 } },
+      south: { name: "남부 보급로", x: 810, y: 235, w: 260, h: 145, initialOwner: "Red", anchor: { x: 810, y: 235 } },
+      front: { name: "적 전방", x: 560, y: 390, w: 330, h: 140, initialOwner: "Red", anchor: { x: 560, y: 390 } },
+      blueApproach: { name: "청군 접근로", x: 560, y: 520, w: 420, h: 95, initialOwner: "Blue" },
+      blueRear: { name: "청군 후방", x: 560, y: 596, w: 540, h: 58, initialOwner: "Blue" }
+    });
+
+    const ROUTES = Object.freeze([
+      ["redRear", "north"], ["north", "front"],
+      ["redRear", "south"], ["south", "front"]
+    ]);
+
+    function makeUnit(id, faction, x, y, role, home) {
+      const maxHp = faction === "Blue" ? PLAYTEST.blueHp : PLAYTEST.redHp;
+      return { id, faction, x, y, role, home, hp: maxHp, maxHp, cooldown: 0, selected: false, command: null };
+    }
+
+    function createState() {
+      const units = [];
+      for (let i = 0; i < PLAYTEST.blueSquads; i += 1) {
+        units.push(makeUnit(`B${i + 1}`, "Blue", 455 + i * 52, 565 + (i % 2) * 17, "player", null));
+      }
+      units.push(makeUnit("RN1", "Red", 310, 235, "guard", "north"));
+      units.push(makeUnit("RS1", "Red", 810, 235, "guard", "south"));
+      units.push(makeUnit("RF1", "Red", 495, 390, "front", "front"));
+      units.push(makeUnit("RF2", "Red", 560, 362, "front", "front"));
+      units.push(makeUnit("RF3", "Red", 625, 390, "front", "front"));
+      return {
+        owners: Object.fromEntries(Object.entries(SECTORS).map(([id, sector]) => [id, sector.initialOwner])),
+        capture: { north: 0, south: 0, front: 0 },
+        units,
+        elapsed: 0,
+        paused: false,
+        ended: false,
+        outcome: null,
+        commandMode: "move",
+        commandArmed: false,
+        reinforcementClock: PLAYTEST.reinforcementInterval,
+        reinforcementsSpawned: 0,
+        stats: { blueLost: 0, redDestroyed: 0, everCutOff: false, cutOffTime: 0, northCaptured: false, southCaptured: false },
+        events: ["적 전방 보급 연결: 북부·남부 두 경로 가동", "청군 5개 분대 작전 개시"],
+        drag: null,
+        lastCommand: null
+      };
+    }
+
+    function resolveFrontSupply(state) {
+      const sourceActive = state.owners.redRear === "Red";
+      const northOpen = sourceActive && state.owners.north === "Red" && state.owners.front === "Red";
+      const southOpen = sourceActive && state.owners.south === "Red" && state.owners.front === "Red";
+      return { sourceActive, northOpen, southOpen, supplied: northOpen || southOpen };
+    }
+
+    function aliveUnits(state, faction) {
+      return state.units.filter(unit => unit.faction === faction && unit.hp > 0);
+    }
+
+    function selectUnits(state, ids, additive = false) {
+      const wanted = new Set(ids);
+      for (const unit of state.units) {
+        if (unit.faction !== "Blue" || unit.hp <= 0) continue;
+        unit.selected = additive ? unit.selected || wanted.has(unit.id) : wanted.has(unit.id);
+      }
+      return state.units.filter(unit => unit.selected && unit.hp > 0).map(unit => unit.id);
+    }
+
+    function issueCommand(state, x, y, mode = state.commandMode) {
+      const selected = aliveUnits(state, "Blue").filter(unit => unit.selected);
+      if (!selected.length) return false;
+      selected.forEach((unit, index) => {
+        const column = index % 3;
+        const row = Math.floor(index / 3);
+        unit.command = { type: mode, x: x + (column - 1) * 25, y: y + row * 22 };
+      });
+      state.lastCommand = { x, y, mode, ttl: 1.15 };
+      state.events.unshift(`${selected.length}개 분대 ${mode === "attackMove" ? "공격 이동" : "이동"} 명령`);
+      state.commandMode = "move";
+      state.commandArmed = false;
+      return true;
+    }
+
+    function applyDamage(state, attacker, target, damage) {
+      if (attacker.hp <= 0 || target.hp <= 0) return false;
+      target.hp = Math.max(0, target.hp - damage);
+      if (target.hp === 0) {
+        target.selected = false;
+        if (target.faction === "Blue") state.stats.blueLost += 1;
+        else state.stats.redDestroyed += 1;
+        state.events.unshift(`${target.id} 분대 전투 불능`);
+        return true;
+      }
+      return false;
+    }
+
+    function setSectorOwner(state, sectorId, faction) {
+      if (!state.owners[sectorId] || state.owners[sectorId] === faction) return false;
+      state.owners[sectorId] = faction;
+      state.capture[sectorId] = 0;
+      if (sectorId === "north" && faction === "Blue") state.stats.northCaptured = true;
+      if (sectorId === "south" && faction === "Blue") state.stats.southCaptured = true;
+      state.events.unshift(`${SECTORS[sectorId].name}: ${faction === "Blue" ? "청군" : "적군"} 점령`);
+      return true;
+    }
+
+    function spawnReinforcement(state) {
+      const supply = resolveFrontSupply(state);
+      if (!supply.supplied || state.reinforcementsSpawned >= PLAYTEST.maxReinforcements || aliveUnits(state, "Red").length >= PLAYTEST.maxRedAlive) return false;
+      state.reinforcementsSpawned += 1;
+      const offset = (state.reinforcementsSpawned % 3 - 1) * 32;
+      const unit = makeUnit(`RR${state.reinforcementsSpawned}`, "Red", 560 + offset, 95, "reinforcement", "front");
+      unit.command = { type: "move", x: 560 + offset, y: 350 };
+      state.units.push(unit);
+      state.events.unshift(`적 증원 ${unit.id} 후방에서 전방으로 출발`);
+      return true;
+    }
+
+    function finishGame(state, outcome) {
+      if (state.ended) return false;
+      state.ended = true;
+      state.outcome = outcome;
+      state.events.unshift(outcome === "VICTORY" ? "적 전방 지휘 거점 확보 — 승리" : "전투 가능 청군 분대 소진 — 패배");
+      return true;
+    }
+
+    function resultStatistics(state) {
+      return {
+        totalTime: state.elapsed,
+        blueSquadsLost: state.stats.blueLost,
+        redSquadsDestroyed: state.stats.redDestroyed,
+        redReinforcementsSpawned: state.reinforcementsSpawned,
+        wasRedFrontEverCutOff: state.stats.everCutOff,
+        totalCutOffTime: state.stats.cutOffTime,
+        northRouteCaptured: state.stats.northCaptured,
+        southRouteCaptured: state.stats.southCaptured
+      };
+    }
+
+    function distance(first, second) { return Math.hypot(first.x - second.x, first.y - second.y); }
+    function moveToward(unit, target, speed, dt) {
+      const dx = target.x - unit.x;
+      const dy = target.y - unit.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 2) return true;
+      const step = Math.min(length, speed * dt);
+      unit.x += dx / length * step;
+      unit.y += dy / length * step;
+      return length <= step + 2;
+    }
+
+    function nearestEnemy(state, unit, radius) {
+      let chosen = null;
+      let best = radius;
+      for (const candidate of state.units) {
+        if (candidate.hp <= 0 || candidate.faction === unit.faction) continue;
+        const d = distance(unit, candidate);
+        if (d < best) { best = d; chosen = candidate; }
+      }
+      return chosen;
+    }
+
+    function updateMovementAndCombat(state, dt) {
+      for (const unit of state.units) {
+        if (unit.hp <= 0) continue;
+        unit.cooldown = Math.max(0, unit.cooldown - dt);
+        const acquire = unit.command?.type === "attackMove" ? PLAYTEST.attackMoveAcquireRange : PLAYTEST.attackRange;
+        const enemy = nearestEnemy(state, unit, acquire);
+        const inFireRange = enemy && distance(unit, enemy) <= PLAYTEST.attackRange;
+        if (inFireRange) {
+          if (unit.cooldown <= 0) {
+            applyDamage(state, unit, enemy, unit.faction === "Blue" ? PLAYTEST.blueDamage : PLAYTEST.redDamage);
+            unit.cooldown = PLAYTEST.fireInterval;
+          }
+          if (unit.command?.type === "attackMove") continue;
+        }
+        if (unit.command) {
+          const speed = unit.faction === "Blue" ? PLAYTEST.blueSpeed : PLAYTEST.redSpeed;
+          if (moveToward(unit, unit.command, speed, dt)) unit.command = null;
+        } else if (unit.faction === "Red" && unit.home && SECTORS[unit.home]) {
+          const home = SECTORS[unit.home].anchor || SECTORS[unit.home];
+          if (distance(unit, home) > 72) moveToward(unit, home, PLAYTEST.redSpeed, dt);
+        }
+      }
+      state.units = state.units.filter(unit => unit.hp > 0);
+    }
+
+    function updateSeparation(state) {
+      for (let i = 0; i < state.units.length; i += 1) {
+        for (let j = i + 1; j < state.units.length; j += 1) {
+          const a = state.units[i]; const b = state.units[j];
+          if (a.faction !== b.faction) continue;
+          const dx = b.x - a.x; const dy = b.y - a.y; const d = Math.hypot(dx, dy) || 0.01;
+          if (d >= PLAYTEST.separationRadius) continue;
+          const push = (PLAYTEST.separationRadius - d) * 0.08;
+          a.x -= dx / d * push; a.y -= dy / d * push;
+          b.x += dx / d * push; b.y += dy / d * push;
+        }
+      }
+    }
+
+    function updateCapture(state, dt) {
+      for (const sectorId of ["north", "south", "front"]) {
+        if (state.owners[sectorId] === "Blue") continue;
+        const anchor = SECTORS[sectorId].anchor;
+        const blue = aliveUnits(state, "Blue").filter(unit => distance(unit, anchor) <= PLAYTEST.captureRadius).length;
+        const red = aliveUnits(state, "Red").filter(unit => distance(unit, anchor) <= PLAYTEST.captureRadius).length;
+        if (blue > 0 && red === 0) {
+          state.capture[sectorId] = Math.min(PLAYTEST.captureSeconds, state.capture[sectorId] + dt * Math.min(2, blue));
+          if (state.capture[sectorId] >= PLAYTEST.captureSeconds) {
+            setSectorOwner(state, sectorId, "Blue");
+            if (sectorId === "front") finishGame(state, "VICTORY");
+          }
+        } else if (blue === 0) {
+          state.capture[sectorId] = Math.max(0, state.capture[sectorId] - dt * 0.3);
+        }
+      }
+    }
+
+    function updateReinforcement(state, dt) {
+      const supply = resolveFrontSupply(state);
+      if (!supply.supplied) {
+        state.stats.everCutOff = true;
+        state.stats.cutOffTime += dt;
+        return;
+      }
+      if (state.reinforcementsSpawned >= PLAYTEST.maxReinforcements) return;
+      state.reinforcementClock -= dt;
+      if (state.reinforcementClock <= 0) {
+        const spawned = spawnReinforcement(state);
+        state.reinforcementClock = spawned ? PLAYTEST.reinforcementInterval : 3;
+      }
+    }
+
+    function updateState(state, dt) {
+      if (state.paused || state.ended) return;
+      state.elapsed += dt;
+      if (state.lastCommand) { state.lastCommand.ttl -= dt; if (state.lastCommand.ttl <= 0) state.lastCommand = null; }
+      updateMovementAndCombat(state, dt);
+      updateSeparation(state);
+      updateCapture(state, dt);
+      updateReinforcement(state, dt);
+      if (!aliveUnits(state, "Blue").length) finishGame(state, "DEFEAT");
+    }
+
+    function runStaticSmoke() {
+      const checks = [];
+      const expect = (condition, name) => { if (!condition) throw new Error(`Static smoke failed: ${name}`); checks.push(name); };
+      let test = createState();
+      expect(aliveUnits(test, "Blue").length === PLAYTEST.blueSquads, "페이지 초기화 / Blue Squad 생성");
+      expect(aliveUnits(test, "Red").length === 5, "Red Defender 생성");
+      expect(selectUnits(test, ["B1"]).length === 1, "Click Selection");
+      expect(selectUnits(test, ["B2", "B3"], true).length === 3, "Drag / Shift Selection");
+      expect(issueCommand(test, 500, 450, "move") && test.units.find(unit => unit.id === "B1").command.type === "move", "Move Command");
+      const moveStart = test.units.find(unit => unit.id === "B1").y;
+      test.units = test.units.filter(unit => unit.faction === "Blue");
+      updateMovementAndCombat(test, 0.5);
+      expect(test.units.find(unit => unit.id === "B1").y < moveStart, "Move 실행");
+      expect(issueCommand(test, 560, 390, "attackMove") && test.units.find(unit => unit.id === "B1").command.type === "attackMove", "Attack Move");
+      const attackTarget = makeUnit("RT", "Red", test.units[0].x, test.units[0].y - 40, "guard", "front");
+      test.units.push(attackTarget);
+      updateMovementAndCombat(test, 0.1);
+      expect(attackTarget.hp < attackTarget.maxHp, "Attack Move 교전");
+      test = createState();
+      const redTarget = test.units.find(unit => unit.id === "RN1");
+      const blueAttacker = test.units.find(unit => unit.id === "B1");
+      redTarget.hp = PLAYTEST.blueDamage;
+      expect(applyDamage(test, blueAttacker, redTarget, PLAYTEST.blueDamage), "Combat / Squad 제거");
+      expect(resolveFrontSupply(test).supplied, "Front Supply 초기 연결");
+      expect(spawnReinforcement(test), "Reinforcement Active");
+      test.units = test.units.filter(unit => unit.faction === "Blue");
+      test.units[0].x = SECTORS.north.anchor.x; test.units[0].y = SECTORS.north.anchor.y;
+      updateCapture(test, PLAYTEST.captureSeconds);
+      expect(test.owners.north === "Blue", "North Route Capture 진행");
+      expect(resolveFrontSupply(test).supplied, "North Capture / South 우회 유지");
+      test.units[0].x = SECTORS.south.anchor.x; test.units[0].y = SECTORS.south.anchor.y;
+      updateCapture(test, PLAYTEST.captureSeconds);
+      expect(test.owners.south === "Blue", "South Route Capture 진행");
+      expect(!resolveFrontSupply(test).supplied, "South Capture / Front Cut Off");
+      expect(!spawnReinforcement(test), "Reinforcement Blocked");
+      setSectorOwner(test, "south", "Red");
+      expect(resolveFrontSupply(test).supplied, "Supply Restore 가능 상태");
+      setSectorOwner(test, "front", "Blue");
+      expect(finishGame(test, "VICTORY") && resultStatistics(test).northRouteCaptured, "Win / Result Statistics");
+      test = createState();
+      test.units.filter(unit => unit.faction === "Blue").forEach(unit => { unit.hp = 0; });
+      updateState(test, 0.1);
+      expect(test.outcome === "DEFEAT", "Lose");
+      test = createState();
+      expect(test.elapsed === 0 && test.capture.front === 0 && test.events.length === 2, "Reset");
+      return { pass: true, checks };
+    }
+
+    if (typeof window !== "undefined") {
+      window.__supplyStrategyMicrogame = { PLAYTEST, SECTORS, createState, resolveFrontSupply, selectUnits, issueCommand, applyDamage, setSectorOwner, spawnReinforcement, finishGame, resultStatistics, updateState, runStaticSmoke };
+    }
+
+    if (typeof document !== "undefined") {
+      const canvas = document.getElementById("battlefield");
+      const context = canvas.getContext("2d");
+      let state = createState();
+      let lastFrame = performance.now();
+
+      function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height };
+      }
+      function formatTime(seconds) { const whole = Math.floor(seconds); return `${String(Math.floor(whole / 60)).padStart(2,"0")}:${String(whole % 60).padStart(2,"0")}`; }
+      function drawLine(a, b, color, width, dashed = false) {
+        context.save(); context.strokeStyle = color; context.lineWidth = width; context.setLineDash(dashed ? [10, 8] : []); context.lineCap = "round";
+        context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke(); context.restore();
+      }
+      function drawSector(id, sector) {
+        const owner = state.owners[id];
+        context.save();
+        context.fillStyle = owner === "Blue" ? "rgba(29,83,113,.28)" : "rgba(104,40,34,.28)";
+        context.strokeStyle = owner === "Blue" ? "#57b9ee" : "#e36e64";
+        context.lineWidth = 2;
+        context.setLineDash([8, 6]);
+        context.beginPath(); context.roundRect(sector.x - sector.w/2, sector.y - sector.h/2, sector.w, sector.h, 18); context.fill(); context.stroke();
+        context.setLineDash([]); context.fillStyle = "#ece8d8"; context.font = "800 15px system-ui"; context.textAlign = "center"; context.fillText(sector.name, sector.x, sector.y - sector.h/2 + 22);
+        if (sector.anchor) {
+          const progress = state.capture[id] / PLAYTEST.captureSeconds;
+          context.strokeStyle = "rgba(255,232,137,.24)"; context.lineWidth = 7; context.beginPath(); context.arc(sector.anchor.x, sector.anchor.y, PLAYTEST.captureRadius, 0, Math.PI*2); context.stroke();
+          context.strokeStyle = "#ffe889"; context.beginPath(); context.arc(sector.anchor.x, sector.anchor.y, 19, 0, Math.PI*2); context.stroke();
+          if (progress > 0) { context.strokeStyle = "#57b9ee"; context.lineWidth = 7; context.beginPath(); context.arc(sector.anchor.x, sector.anchor.y, PLAYTEST.captureRadius, -Math.PI/2, -Math.PI/2 + Math.PI*2*progress); context.stroke(); }
+          context.fillStyle = "#fff4ba"; context.font = "900 11px system-ui"; context.fillText(owner === "Blue" ? "청" : "적", sector.anchor.x, sector.anchor.y + 4);
+        }
+        context.restore();
+      }
+      function drawRoutes() {
+        const supply = resolveFrontSupply(state);
+        const rear = SECTORS.redRear;
+        const front = SECTORS.front;
+        drawLine(rear, SECTORS.north, supply.northOpen ? "#66e397" : "#4a534b", supply.northOpen ? 7 : 4, !supply.northOpen);
+        drawLine(SECTORS.north, front, supply.northOpen ? "#66e397" : "#4a534b", supply.northOpen ? 7 : 4, !supply.northOpen);
+        drawLine(rear, SECTORS.south, supply.southOpen ? "#66e397" : "#4a534b", supply.southOpen ? 7 : 4, !supply.southOpen);
+        drawLine(SECTORS.south, front, supply.southOpen ? "#66e397" : "#4a534b", supply.southOpen ? 7 : 4, !supply.southOpen);
+        drawLine({x:390,y:462},{x:730,y:462},"#e8c65e",6,true);
+      }
+      function drawUnit(unit) {
+        const color = unit.faction === "Blue" ? "#57b9ee" : "#e36e64";
+        context.save();
+        if (unit.selected) { context.strokeStyle = "#fff2a4"; context.lineWidth = 3; context.beginPath(); context.arc(unit.x, unit.y, PLAYTEST.unitRadius + 7, 0, Math.PI*2); context.stroke(); }
+        context.fillStyle = unit.faction === "Blue" ? "#174d69" : "#672b27"; context.strokeStyle = color; context.lineWidth = 3;
+        context.beginPath(); context.arc(unit.x, unit.y, PLAYTEST.unitRadius, 0, Math.PI*2); context.fill(); context.stroke();
+        context.fillStyle = "#fff"; context.font = "900 9px system-ui"; context.textAlign = "center"; context.fillText(unit.id, unit.x, unit.y + 3);
+        context.fillStyle = "#242a25"; context.fillRect(unit.x - 18, unit.y - 24, 36, 5); context.fillStyle = color; context.fillRect(unit.x - 18, unit.y - 24, 36 * unit.hp / unit.maxHp, 5);
+        if (unit.command) { drawLine(unit, unit.command, unit.command.type === "attackMove" ? "rgba(232,198,94,.5)" : "rgba(87,185,238,.35)", 1, unit.command.type === "attackMove"); }
+        context.restore();
+      }
+      function draw() {
+        context.clearRect(0,0,canvas.width,canvas.height);
+        const gradient = context.createLinearGradient(0,0,0,canvas.height); gradient.addColorStop(0,"#20261c"); gradient.addColorStop(.5,"#151b14"); gradient.addColorStop(1,"#17211b"); context.fillStyle = gradient; context.fillRect(0,0,canvas.width,canvas.height);
+        context.strokeStyle = "rgba(210,194,130,.08)"; context.lineWidth = 1; for(let x=0;x<canvas.width;x+=40){context.beginPath();context.moveTo(x,0);context.lineTo(x,canvas.height);context.stroke();} for(let y=0;y<canvas.height;y+=40){context.beginPath();context.moveTo(0,y);context.lineTo(canvas.width,y);context.stroke();}
+        drawRoutes();
+        Object.entries(SECTORS).forEach(([id, sector]) => drawSector(id, sector));
+        context.fillStyle = "#e8c65e"; context.font = "900 11px system-ui"; context.textAlign = "center"; context.fillText("BATTLE LINE / 전선",560,467);
+        state.units.forEach(drawUnit);
+        if (state.lastCommand) { context.strokeStyle = state.lastCommand.mode === "attackMove" ? "#e8c65e" : "#57b9ee"; context.lineWidth = 3; context.beginPath(); context.arc(state.lastCommand.x,state.lastCommand.y,14,0,Math.PI*2); context.stroke(); }
+        if (state.drag) { context.fillStyle="rgba(87,185,238,.12)";context.strokeStyle="#8bd5ff";context.setLineDash([6,4]);const x=Math.min(state.drag.start.x,state.drag.current.x),y=Math.min(state.drag.start.y,state.drag.current.y),w=Math.abs(state.drag.current.x-state.drag.start.x),h=Math.abs(state.drag.current.y-state.drag.start.y);context.fillRect(x,y,w,h);context.strokeRect(x,y,w,h);context.setLineDash([]); }
+      }
+      function renderUi() {
+        const supply = resolveFrontSupply(state); const blue = aliveUnits(state,"Blue"); const red = aliveUnits(state,"Red"); const selected = blue.filter(unit=>unit.selected);
+        document.getElementById("blue-alive").textContent=blue.length; document.getElementById("red-alive").textContent=red.length; document.getElementById("selected-count").textContent=selected.length; document.getElementById("play-time").textContent=formatTime(state.elapsed);
+        const supplyText=supply.supplied?"보급 연결":"보급 차단"; const frontSupply=document.getElementById("front-supply");frontSupply.textContent=supplyText;frontSupply.className=supply.supplied?"good":"warn";
+        const rein=document.getElementById("reinforcement-state");rein.textContent=supply.supplied?"가동":"차단";rein.className=supply.supplied?"good":"warn";
+        document.getElementById("north-route").textContent=state.owners.north==="Red"?"적군 통제 · 활성":"청군 점령 · 차단";document.getElementById("south-route").textContent=state.owners.south==="Red"?"적군 통제 · 활성":"청군 점령 · 차단";
+        const readout=document.getElementById("supply-readout");readout.textContent=supply.supplied?"SUPPLIED":"CUT OFF";readout.className=supply.supplied?"good":"warn";
+        document.getElementById("next-reinforcement").textContent=supply.supplied&&state.reinforcementsSpawned<PLAYTEST.maxReinforcements?formatTime(Math.max(0,state.reinforcementClock)):supply.supplied?"상한 도달":"BLOCKED BY SUPPLY CUT";document.getElementById("reinforcements-spawned").textContent=state.reinforcementsSpawned;
+        document.getElementById("move-mode").classList.toggle("active",state.commandArmed&&state.commandMode==="move");document.getElementById("attack-mode").classList.toggle("active",state.commandArmed&&state.commandMode==="attackMove");document.getElementById("pause-game").textContent=state.paused?"계속 · P":"일시정지 · P";document.getElementById("pause-screen").classList.toggle("visible",state.paused&&!state.ended);
+        document.getElementById("selection-list").innerHTML=selected.length?selected.map(unit=>`<div class="unit-line"><span>${unit.id} · HP ${Math.ceil(unit.hp)}/${unit.maxHp}</span><span class="mini-hp"><i style="width:${unit.hp/unit.maxHp*100}%"></i></span></div>`).join(""):"청군 분대를 클릭하거나 드래그하세요.";
+        document.getElementById("event-log").innerHTML=state.events.slice(0,12).map(event=>`<li>${event}</li>`).join("");
+        if(state.ended){const stats=resultStatistics(state);document.getElementById("result-panel").classList.add("visible");document.getElementById("result-title").textContent=state.outcome==="VICTORY"?"VICTORY · 적 전방 확보":"PLAYTEST FAILED";document.getElementById("result-summary").textContent=stats.wasRedFrontEverCutOff?"보급 차단을 거친 결과입니다. 다시 시작해 정면 돌파 결과와 비교해 보세요.":"보급로를 모두 끊지 않은 결과입니다. 다시 시작해 보급 차단 전략과 비교해 보세요.";const rows=[["총 시간",formatTime(stats.totalTime)],["청군 손실",stats.blueSquadsLost],["적군 격파",stats.redSquadsDestroyed],["적 증원",stats.redReinforcementsSpawned],["전방 Cut Off",stats.wasRedFrontEverCutOff?"예":"아니오"],["총 차단 시간",formatTime(stats.totalCutOffTime)],["북부 점령",stats.northRouteCaptured?"예":"아니오"],["남부 점령",stats.southRouteCaptured?"예":"아니오"]];document.getElementById("result-stats").innerHTML=rows.map(([label,value])=>`<div class="stat"><span>${label}</span><strong>${value}</strong></div>`).join("");}
+      }
+      function resetGame(){state=createState();lastFrame=performance.now();document.getElementById("result-panel").classList.remove("visible");renderUi();draw();canvas.focus();}
+      function setMode(mode){state.commandMode=mode;state.commandArmed=true;state.events.unshift(`${mode==="attackMove"?"공격 이동":"이동"} 목적지를 좌클릭하거나 우클릭하세요`);renderUi();canvas.focus();}
+      function togglePause(){if(state.ended)return;state.paused=!state.paused;state.events.unshift(state.paused?"일시정지":"작전 재개");renderUi();}
+      canvas.addEventListener("pointerdown",event=>{if(event.button!==0||state.ended)return;const point=canvasPoint(event);state.drag={start:point,current:point,shift:event.shiftKey};canvas.setPointerCapture(event.pointerId);});
+      canvas.addEventListener("pointermove",event=>{if(!state.drag)return;state.drag.current=canvasPoint(event);});
+      canvas.addEventListener("pointerup",event=>{if(!state.drag)return;const drag=state.drag;const point=canvasPoint(event);const moved=Math.hypot(point.x-drag.start.x,point.y-drag.start.y);let ids=[];if(moved<8){let closest=null,best=PLAYTEST.unitRadius+9;for(const unit of aliveUnits(state,"Blue")){const d=Math.hypot(point.x-unit.x,point.y-unit.y);if(d<best){best=d;closest=unit;}}if(closest)ids=[closest.id];else if(state.commandArmed){issueCommand(state,point.x,point.y,state.commandMode);state.drag=null;renderUi();return;}}else{const left=Math.min(drag.start.x,point.x),right=Math.max(drag.start.x,point.x),top=Math.min(drag.start.y,point.y),bottom=Math.max(drag.start.y,point.y);ids=aliveUnits(state,"Blue").filter(unit=>unit.x>=left&&unit.x<=right&&unit.y>=top&&unit.y<=bottom).map(unit=>unit.id);}selectUnits(state,ids,drag.shift);state.drag=null;renderUi();});
+      canvas.addEventListener("contextmenu",event=>{event.preventDefault();if(state.ended)return;const point=canvasPoint(event);if(issueCommand(state,point.x,point.y,state.commandMode))renderUi();});
+      document.getElementById("move-mode").addEventListener("click",()=>setMode("move"));document.getElementById("attack-mode").addEventListener("click",()=>setMode("attackMove"));document.getElementById("pause-game").addEventListener("click",togglePause);document.getElementById("reset-game").addEventListener("click",resetGame);document.getElementById("retry-game").addEventListener("click",resetGame);
+      window.addEventListener("keydown",event=>{if(event.target!==canvas&&["INPUT","TEXTAREA"].includes(event.target.tagName))return;if(event.key.toLowerCase()==="a"){setMode("attackMove");event.preventDefault();}else if(event.key.toLowerCase()==="m"){setMode("move");event.preventDefault();}else if(event.key.toLowerCase()==="p"){togglePause();event.preventDefault();}else if(event.key==="Escape"){selectUnits(state,[]);renderUi();}});
+      function frame(now){const dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;updateState(state,dt);renderUi();draw();requestAnimationFrame(frame);}renderUi();draw();requestAnimationFrame(frame);
+    }
+  </script>
+</body>
+</html>

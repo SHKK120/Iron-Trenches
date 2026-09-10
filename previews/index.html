@@ -15,8 +15,10 @@
     .preview-list { display: grid; gap: 14px; }
     .card { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 18px; padding: 20px; border: 1px solid #465145; border-radius: 14px; background: rgba(18, 25, 19, 0.95); }
     .card.current { border-color: #d2b450; box-shadow: 0 0 0 1px rgba(210, 180, 80, 0.2), 0 18px 50px rgba(0, 0, 0, 0.28); }
+    .card.technical { border-color: #4e7960; }
     .status { align-self: start; padding: 5px 8px; border-radius: 999px; background: #293429; color: #cbd4c3; font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
     .current .status { background: #675824; color: #fff0ba; }
+    .technical .status { background: #244c33; color: #bdf4ce; }
     h2 { margin: 0 0 5px; font-size: 1.14rem; }
     .card p { margin: 0; color: #9fa99a; font-size: 0.88rem; line-height: 1.5; }
     a { padding: 10px 14px; border: 1px solid #71806b; border-radius: 8px; background: #313b2d; color: #fff; font-weight: 850; text-decoration: none; white-space: nowrap; }
@@ -33,13 +35,18 @@
   <main>
     <p class="kicker">Iron &amp; Trenches</p>
     <h1>플레이 미리보기 모음</h1>
-    <p class="intro">소스 전용 C# 기능을 사람이 직접 확인하는 독립 미리보기 모음입니다. 각 미리보기는 기술 정본이 아니며 Unity 통합과 별도로 판정합니다.</p>
+    <p class="intro">기술 규칙을 읽는 Preview와 실제 RTS 선택을 시험하는 Microgame을 분리한 독립 실행 모음입니다. Browser Gameplay는 기술 정본이 아니며 Unity 통합과 별도로 판정합니다.</p>
 
     <section class="preview-list" aria-label="플레이 미리보기 목록">
       <article class="card current">
-        <span class="status">현재</span>
-        <div><h2>RTS-CORE-03A — 전략 보급 연결</h2><p>후방 보급원에서 전방까지 이어지는 두 경로를 차단하고 복구하며, 소유권을 유지한 전방의 고립 상태를 확인합니다.</p></div>
-        <a href="RTS_CORE_03A_SupplyConnectivity.html">03A 열기</a>
+        <span class="status">현재 Playtest</span>
+        <div><h2>RTS-PLAYTEST-03A — 보급 전략 마이크로게임</h2><p>분대를 선택·이동·전투·점령하며 정면 돌파와 북부/남부 보급로 차단 전략을 직접 비교합니다.</p></div>
+        <a href="RTS_PLAYTEST_03A_SupplyStrategy.html">Playtest 열기</a>
+      </article>
+      <article class="card technical">
+        <span class="status">기술 Preview</span>
+        <div><h2>RTS-CORE-03A — 전략 보급 연결</h2><p>후방 보급원에서 전방까지 이어지는 두 경로와 Supplied/Cut Off 규칙을 단계별로 판독합니다.</p></div>
+        <a href="RTS_CORE_03A_SupplyConnectivity.html">규칙 Preview 열기</a>
       </article>
       <article class="card">
         <span class="status">완료</span>
@@ -65,7 +72,7 @@
 
     <section class="project-status" aria-label="개발 상태">
       <div><span>개발 방식</span><strong>소스 전용</strong></div>
-      <div><span>사람 확인</span><strong>03A 확인 대기</strong></div>
+      <div><span>사람 확인</span><strong>03A 전략/재미 판정 대기</strong></div>
       <div><span>Unity 통합</span><strong>보류</strong></div>
     </section>
 
