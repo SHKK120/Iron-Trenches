@@ -2977,6 +2977,470 @@ var postInterdictionSupply = StrategicSupplyResolver.Resolve(
     new[] { productionSupplySource });
 Expect(postInterdictionSupply.GetStatus("production-front") == SectorSupplyStatus.Supplied, "DestroyedEnRoute changed Strategic Supply connectivity.");
 
+var captureQueueTopology = new SectorTopology();
+captureQueueTopology.RegisterSector("capture-blue-sector");
+captureQueueTopology.RegisterSector("capture-red-sector");
+captureQueueTopology.RegisterSector("capture-other-sector");
+captureQueueTopology.AddBidirectionalAdjacency("capture-blue-sector", "capture-red-sector");
+captureQueueTopology.AddBidirectionalAdjacency("capture-red-sector", "capture-other-sector");
+var captureBlueSector = new SectorState("capture-blue-sector", "blue");
+var captureRedSector = new SectorState("capture-red-sector", "red");
+var captureOtherSector = new SectorState("capture-other-sector", "red");
+var captureQueueTerritory = new TerritoryGraph(
+    captureQueueTopology,
+    new[] { captureBlueSector, captureRedSector, captureOtherSector },
+    new[]
+    {
+        new SectorControlAnchor("capture-blue-anchor", "capture-blue-sector"),
+        new SectorControlAnchor("capture-red-anchor", "capture-red-sector"),
+        new SectorControlAnchor("capture-other-anchor", "capture-other-sector")
+    });
+var captureBarracksA = new BuildingState(
+    "capture-barracks-a",
+    "Barracks",
+    "red",
+    "capture-red-sector",
+    new WorldPoint(10f, 0f),
+    2f);
+var captureBarracksB = new BuildingState(
+    "capture-barracks-b",
+    "Barracks",
+    "red",
+    "capture-red-sector",
+    new WorldPoint(12f, 2f),
+    2f);
+var captureEmptyBarracks = new BuildingState(
+    "capture-barracks-empty",
+    "Barracks",
+    "red",
+    "capture-red-sector",
+    new WorldPoint(14f, -2f),
+    2f);
+var captureDepot = new BuildingState(
+    "capture-depot",
+    "Depot",
+    "red",
+    "capture-red-sector",
+    new WorldPoint(16f, 0f),
+    2f);
+var captureOtherBarracks = new BuildingState(
+    "capture-other-barracks",
+    "Barracks",
+    "red",
+    "capture-other-sector",
+    new WorldPoint(30f, 0f),
+    2f);
+var captureBuildings = new List<BuildingState>
+{
+    captureBarracksA,
+    captureBarracksB,
+    captureEmptyBarracks,
+    captureDepot,
+    captureOtherBarracks
+};
+var captureDefinition = new ProductionDefinition("RifleSquad", 40, 12f, 2f);
+var captureProfile = new ProductionFacilityProfile("Barracks", new[] { "RifleSquad" });
+var captureDefinitions = new[] { captureDefinition };
+var captureProfiles = new[] { captureProfile };
+var captureSites = Array.Empty<ConstructionSite>();
+var captureQueues = new List<ProductionQueue>();
+var captureReady = new List<ReadyReinforcement>();
+var redCaptureEconomy = new EconomyState("red", 1000);
+
+ProductionEnqueueResult EnqueueCaptureOrder(
+    string orderId,
+    string reinforcementId,
+    string facilityId,
+    string factionId,
+    EconomyState economy,
+    string destinationSectorId,
+    WorldPoint destinationPosition,
+    ICollection<ProductionQueue> queues,
+    IEnumerable<BuildingState> buildings,
+    IEnumerable<ReadyReinforcement> ready)
+{
+    return ProductionService.Enqueue(
+        new ProductionRequest(
+            orderId,
+            reinforcementId,
+            facilityId,
+            factionId,
+            "RifleSquad",
+            destinationSectorId,
+            destinationPosition),
+        captureQueueTerritory,
+        economy,
+        buildings,
+        captureSites,
+        captureDefinitions,
+        captureProfiles,
+        queues,
+        ready);
+}
+
+var readyBeforeCaptureEnqueue = EnqueueCaptureOrder(
+    "capture-ready-order",
+    "capture-ready-r1",
+    captureBarracksA.BuildingId,
+    "red",
+    redCaptureEconomy,
+    "capture-other-sector",
+    new WorldPoint(30f, 0f),
+    captureQueues,
+    captureBuildings,
+    captureReady);
+Expect(readyBeforeCaptureEnqueue.Success, "03E Ready fixture did not enqueue.");
+var captureQueueA = captureQueues[0];
+var readyBeforeCaptureAdvance = ProductionAdvanceService.Advance(
+    captureQueueA,
+    captureBarracksA,
+    12f,
+    captureReady);
+Expect(readyBeforeCaptureAdvance.Success, "03E Ready fixture did not advance.");
+Expect(captureReady.Count == 1, "03E Ready fixture did not complete.");
+var preservedReady = captureReady[0];
+
+var captureRoutePlanner = new ReinforcementRoutePlanner(
+    new RoadNetwork(),
+    new RoadMovementProfile(1.4f),
+    new RectangularTerrainMovementResolver(new TerrainMovementProfile("Open", 1f)));
+var redCaptureSupply = StrategicSupplyResolver.Resolve(
+    captureQueueTerritory,
+    "red",
+    new[] { new SupplySourceDefinition("capture-red-source", "red", "capture-red-sector") });
+var captureTransits = new List<ReinforcementTransit>();
+var transitBeforeCapture = ReinforcementDispatchService.Dispatch(
+    new ReinforcementDispatchRequest(
+        "capture-transit-r2",
+        "red",
+        "capture-red-sector",
+        captureBarracksA.Position,
+        "capture-other-sector",
+        new WorldPoint(30f, 0f),
+        2f),
+    captureQueueTerritory,
+    redCaptureSupply,
+    captureRoutePlanner,
+    captureTransits);
+Expect(transitBeforeCapture.Success, "03E EnRoute fixture did not dispatch.");
+Expect(transitBeforeCapture.Transit!.State == ReinforcementState.EnRoute, "03E EnRoute fixture was not moving.");
+
+Expect(EnqueueCaptureOrder("capture-order-a", "capture-reinforcement-a", captureBarracksA.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(30f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E active order did not enqueue.");
+Expect(EnqueueCaptureOrder("capture-order-b", "capture-reinforcement-b", captureBarracksA.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(30f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E waiting order B did not enqueue.");
+Expect(EnqueueCaptureOrder("capture-order-c", "capture-reinforcement-c", captureBarracksA.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(30f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E waiting order C did not enqueue.");
+var partialAdvance = ProductionAdvanceService.Advance(captureQueueA, captureBarracksA, 11f, captureReady);
+Expect(partialAdvance.Success, "03E nearly-complete active order did not advance.");
+Expect(captureQueueA.CurrentOrder!.ProgressSeconds == 11f, "03E active order progress fixture was incorrect.");
+Expect(EnqueueCaptureOrder("capture-order-d", "capture-reinforcement-d", captureBarracksB.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(30f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E second facility order D did not enqueue.");
+Expect(EnqueueCaptureOrder("capture-order-e", "capture-reinforcement-e", captureBarracksB.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(30f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E second facility order E did not enqueue.");
+Expect(EnqueueCaptureOrder("capture-other-order", "capture-other-reinforcement", captureOtherBarracks.BuildingId, "red", redCaptureEconomy, "capture-other-sector", new WorldPoint(32f, 0f), captureQueues, captureBuildings, captureReady).Success, "03E other-sector order did not enqueue.");
+var captureQueueB = captureQueues[1];
+var captureOtherQueue = captureQueues[2];
+var redBalanceBeforeCapture = redCaptureEconomy.Balance;
+Expect(redBalanceBeforeCapture == 720, "03E Red economy fixture balance was incorrect.");
+
+var captureTransfer = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    captureQueueTerritory,
+    "capture-red-anchor",
+    "blue",
+    captureBuildings);
+Expect(captureTransfer.CaptureChanged, "03E Sector capture did not change ownership.");
+Expect(captureTransfer.TransferredBuildingCount == 4, "03E capture did not transfer every target-sector building.");
+Expect(captureBarracksA.OwnerId == "blue", "03E first Barracks owner did not transfer.");
+Expect(captureBarracksB.OwnerId == "blue", "03E second Barracks owner did not transfer.");
+Expect(captureEmptyBarracks.OwnerId == "blue", "03E empty Barracks owner did not transfer.");
+Expect(captureDepot.OwnerId == "blue", "03E non-production Building owner did not transfer.");
+Expect(captureOtherBarracks.OwnerId == "red", "03E capture changed another Sector building.");
+
+var captureResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    captureTransfer,
+    captureBuildings,
+    captureProfiles,
+    captureQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(captureResolution.Success, "03E queue capture resolution failed.");
+Expect(captureResolution.CaptureChanged, "03E resolution lost the capture change.");
+Expect(captureResolution.PreviousOwnerId == "red", "03E resolution lost the previous owner.");
+Expect(captureResolution.NewOwnerId == "blue", "03E resolution lost the new owner.");
+Expect(captureResolution.Facilities.Count == 4, "03E resolution did not report every transferred building.");
+Expect(captureResolution.ProductionFacilityCount == 3, "03E production facility detection count was incorrect.");
+Expect(captureResolution.CancelledOrderCount == 5, "03E did not cancel active and waiting orders across facilities.");
+Expect(captureQueueA.Orders.Count == 0, "03E first facility queue was not emptied atomically.");
+Expect(captureQueueB.Orders.Count == 0, "03E second facility queue was not emptied.");
+Expect(captureOtherQueue.Orders.Count == 1, "03E changed another Sector queue.");
+Expect(captureOtherQueue.CurrentOrder!.OrderId == "capture-other-order", "03E replaced another Sector order.");
+Expect(redCaptureEconomy.Balance == redBalanceBeforeCapture, "03E capture refunded the previous owner.");
+
+CapturedFacilityQueueResolution? barracksAResolution = null;
+CapturedFacilityQueueResolution? barracksBResolution = null;
+CapturedFacilityQueueResolution? emptyBarracksResolution = null;
+CapturedFacilityQueueResolution? depotResolution = null;
+foreach (var facilityResolution in captureResolution.Facilities)
+{
+    if (facilityResolution.CapturedFacilityId == captureBarracksA.BuildingId)
+    {
+        barracksAResolution = facilityResolution;
+    }
+    else if (facilityResolution.CapturedFacilityId == captureBarracksB.BuildingId)
+    {
+        barracksBResolution = facilityResolution;
+    }
+    else if (facilityResolution.CapturedFacilityId == captureEmptyBarracks.BuildingId)
+    {
+        emptyBarracksResolution = facilityResolution;
+    }
+    else if (facilityResolution.CapturedFacilityId == captureDepot.BuildingId)
+    {
+        depotResolution = facilityResolution;
+    }
+}
+
+Expect(barracksAResolution != null, "03E first Barracks resolution was missing.");
+Expect(barracksAResolution!.WasProductionFacility, "03E first Barracks was not detected as production-capable.");
+Expect(barracksAResolution.ResolutionApplied, "03E first Barracks policy was not applied.");
+Expect(barracksAResolution.CancelledOrderCount == 3, "03E first Barracks did not cancel FIFO A/B/C.");
+Expect(barracksAResolution.CancelledOrderIds[0] == "capture-order-a", "03E active order id was not reported first.");
+Expect(barracksAResolution.CancelledOrderIds[1] == "capture-order-b", "03E waiting order B id was not reported.");
+Expect(barracksAResolution.CancelledOrderIds[2] == "capture-order-c", "03E waiting order C id was not reported.");
+Expect(barracksBResolution != null && barracksBResolution.CancelledOrderCount == 2, "03E second Barracks queue was not independently resolved.");
+Expect(emptyBarracksResolution != null && emptyBarracksResolution.WasProductionFacility, "03E empty production facility was not recognized.");
+Expect(emptyBarracksResolution!.CancelledOrderCount == 0, "03E empty production facility reported cancelled orders.");
+Expect(depotResolution != null && !depotResolution.WasProductionFacility, "03E Depot was treated as a production facility.");
+Expect(!depotResolution!.ResolutionApplied, "03E applied queue policy to a non-production Building.");
+Expect(depotResolution.CancelledOrderCount == 0, "03E non-production Building cancelled an order.");
+
+var readyCountAfterCapture = captureReady.Count;
+var advanceAfterCapture = ProductionAdvanceService.Advance(captureQueueA, captureBarracksA, 100f, captureReady);
+Expect(advanceAfterCapture.Success, "03E empty captured queue failed a later Advance.");
+Expect(advanceAfterCapture.AppliedSeconds == 0f, "03E cancelled progress survived capture.");
+Expect(captureReady.Count == readyCountAfterCapture, "03E cancelled nearly-complete order created a Ready reinforcement.");
+Expect(captureReady.Count == 1, "03E capture deleted or created Ready reinforcement unexpectedly.");
+Expect(ReferenceEquals(captureReady[0], preservedReady), "03E capture replaced the Ready object.");
+Expect(captureReady[0].ReinforcementId == "capture-ready-r1", "03E capture changed the Ready id.");
+Expect(captureReady[0].FactionId == "red", "03E capture transferred Ready ownership.");
+Expect(transitBeforeCapture.Transit.State == ReinforcementState.EnRoute, "03E capture deleted an existing transit.");
+Expect(transitBeforeCapture.Transit.FactionId == "red", "03E capture transferred an existing transit.");
+Expect(captureTransits.Count == 1, "03E capture changed the transit collection.");
+
+var blueCaptureSupply = StrategicSupplyResolver.Resolve(
+    captureQueueTerritory,
+    "blue",
+    new[] { new SupplySourceDefinition("capture-blue-source", "blue", "capture-red-sector") });
+var blockedPreservedReadyDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    preservedReady,
+    captureBuildings,
+    captureQueueTerritory,
+    blueCaptureSupply,
+    captureRoutePlanner,
+    captureReady,
+    captureTransits);
+Expect(!blockedPreservedReadyDispatch.Success, "03E old-owner Ready dispatched from a captured facility.");
+Expect(blockedPreservedReadyDispatch.FailureReason == ProductionReinforcementIntegrationFailureReason.SourceOwnershipConflict, "03E captured-source Ready returned the wrong failure.");
+Expect(captureReady.Count == 1 && ReferenceEquals(captureReady[0], preservedReady), "03E failed Ready dispatch did not preserve the object.");
+
+var blueCaptureEconomy = new EconomyState("blue", 200);
+var blueBalanceBeforeReuseChecks = blueCaptureEconomy.Balance;
+var reusedCancelledOrderId = EnqueueCaptureOrder(
+    "capture-order-a",
+    "capture-blue-reinforcement-reuse-check",
+    captureBarracksA.BuildingId,
+    "blue",
+    blueCaptureEconomy,
+    "capture-blue-sector",
+    new WorldPoint(0f, 0f),
+    captureQueues,
+    captureBuildings,
+    Array.Empty<ReadyReinforcement>());
+Expect(!reusedCancelledOrderId.Success, "03E changed the existing Queue order-id reuse policy.");
+Expect(reusedCancelledOrderId.FailureReason == ProductionEnqueueFailureReason.DuplicateOrderId, "03E cancelled order-id reuse returned the wrong failure.");
+var reusedCancelledReinforcementId = EnqueueCaptureOrder(
+    "capture-blue-order-reuse-check",
+    "capture-reinforcement-a",
+    captureBarracksA.BuildingId,
+    "blue",
+    blueCaptureEconomy,
+    "capture-blue-sector",
+    new WorldPoint(0f, 0f),
+    captureQueues,
+    captureBuildings,
+    Array.Empty<ReadyReinforcement>());
+Expect(!reusedCancelledReinforcementId.Success, "03E changed the existing Queue reinforcement-id reuse policy.");
+Expect(reusedCancelledReinforcementId.FailureReason == ProductionEnqueueFailureReason.DuplicateReinforcementId, "03E cancelled reinforcement-id reuse returned the wrong failure.");
+Expect(blueCaptureEconomy.Balance == blueBalanceBeforeReuseChecks, "03E id reuse validation changed the new owner economy.");
+Expect(captureQueueA.Orders.Count == 0, "03E id reuse validation repopulated the cancelled queue.");
+var blueFreshProduction = EnqueueCaptureOrder(
+    "capture-blue-order",
+    "capture-blue-reinforcement",
+    captureBarracksA.BuildingId,
+    "blue",
+    blueCaptureEconomy,
+    "capture-blue-sector",
+    new WorldPoint(0f, 0f),
+    captureQueues,
+    captureBuildings,
+    Array.Empty<ReadyReinforcement>());
+Expect(blueFreshProduction.Success, "03E new owner could not start fresh production.");
+Expect(blueCaptureEconomy.Balance == 160, "03E new owner production did not charge the normal cost.");
+Expect(captureQueueA.Orders.Count == 1, "03E new owner did not receive a fresh queue order.");
+Expect(captureQueueA.CurrentOrder!.RequestedByFactionId == "blue", "03E fresh queue owner meaning was incorrect.");
+Expect(captureQueueA.CurrentOrder.OrderId == "capture-blue-order", "03E old Queue transferred into the fresh queue.");
+var blueReadyAfterCapture = new List<ReadyReinforcement>();
+var blueAdvanceAfterCapture = ProductionAdvanceService.Advance(
+    captureQueueA,
+    captureBarracksA,
+    12f,
+    blueReadyAfterCapture);
+Expect(blueAdvanceAfterCapture.Success, "03E new owner production did not advance.");
+Expect(blueReadyAfterCapture.Count == 1, "03E new owner production did not create Ready reinforcement.");
+Expect(blueReadyAfterCapture[0].FactionId == "blue", "03E new owner production created the wrong faction.");
+Expect(blueReadyAfterCapture[0].UnitTypeId == "RifleSquad", "03E new owner production changed the unit type.");
+
+var blueThreat = new RouteThreatSource(
+    "capture-blue-route-threat",
+    "red",
+    new WorldPoint(5f, 0f),
+    3f,
+    RouteThreatKind.MobileUnit,
+    1f);
+var bluePostCaptureDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    blueReadyAfterCapture[0],
+    captureBuildings,
+    captureQueueTerritory,
+    blueCaptureSupply,
+    captureRoutePlanner,
+    new[] { blueThreat },
+    new RoutePlanningProfile(1f, 1f),
+    blueReadyAfterCapture,
+    captureTransits);
+Expect(bluePostCaptureDispatch.Success, "03E fresh production did not integrate with 03C/03D dispatch.");
+Expect(bluePostCaptureDispatch.Transit!.FactionId == "blue", "03E integrated transit had the wrong faction.");
+Expect(bluePostCaptureDispatch.Transit.State == ReinforcementState.EnRoute, "03E integrated reinforcement did not enter EnRoute.");
+Expect(bluePostCaptureDispatch.Transit.RouteThreatAssessment.HasThreat, "03E integrated dispatch bypassed 03D threat assessment.");
+Expect(blueReadyAfterCapture.Count == 0, "03E successful integrated dispatch left Ready behind.");
+
+var sameOwnerQueueOrder = EnqueueCaptureOrder(
+    "capture-blue-hold-order",
+    "capture-blue-hold-reinforcement",
+    captureBarracksA.BuildingId,
+    "blue",
+    blueCaptureEconomy,
+    "capture-blue-sector",
+    new WorldPoint(0f, 0f),
+    captureQueues,
+    captureBuildings,
+    Array.Empty<ReadyReinforcement>());
+Expect(sameOwnerQueueOrder.Success, "03E same-owner no-op fixture did not enqueue.");
+var queueCountBeforeSameOwnerCapture = captureQueueA.Orders.Count;
+var sameOwnerTransfer03e = TerritoryBuildingOwnershipService.CaptureAndTransfer(
+    captureQueueTerritory,
+    "capture-red-anchor",
+    "blue",
+    captureBuildings);
+var sameOwnerResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    sameOwnerTransfer03e,
+    captureBuildings,
+    captureProfiles,
+    captureQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(!sameOwnerTransfer03e.CaptureChanged, "03E same-owner capture unexpectedly changed ownership.");
+Expect(sameOwnerResolution.Success && !sameOwnerResolution.CaptureChanged, "03E unchanged capture did not return a successful no-op.");
+Expect(sameOwnerResolution.Facilities.Count == 0, "03E unchanged capture reported facility resolutions.");
+Expect(captureQueueA.Orders.Count == queueCountBeforeSameOwnerCapture, "03E unchanged capture modified the queue.");
+
+var inconsistentCapture = new SectorBuildingTransferResult(
+    "capture-red-sector",
+    "red",
+    "green",
+    true,
+    new[] { captureBarracksA.BuildingId });
+var queueCountBeforeInconsistentCapture = captureQueueA.Orders.Count;
+var inconsistentResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    inconsistentCapture,
+    captureBuildings,
+    captureProfiles,
+    captureQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(!inconsistentResolution.Success, "03E accepted an inconsistent capture result.");
+Expect(inconsistentResolution.FailureReason == ProductionFacilityCaptureResolutionFailureReason.InconsistentCaptureResult, "03E inconsistent capture returned the wrong failure.");
+Expect(captureQueueA.Orders.Count == queueCountBeforeInconsistentCapture, "03E inconsistent capture modified a queue.");
+
+var mixedOwnerCapture = new SectorBuildingTransferResult(
+    "capture-red-sector",
+    "red",
+    "blue",
+    true,
+    new[] { captureBarracksA.BuildingId });
+var mixedOwnerResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    mixedOwnerCapture,
+    captureBuildings,
+    captureProfiles,
+    captureQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(!mixedOwnerResolution.Success, "03E accepted a contradictory queue owner.");
+Expect(mixedOwnerResolution.FailureReason == ProductionFacilityCaptureResolutionFailureReason.InconsistentQueueLinkage, "03E contradictory queue returned the wrong failure.");
+Expect(captureQueueA.Orders.Count == queueCountBeforeInconsistentCapture, "03E contradictory queue linkage partially cancelled orders.");
+
+var unsupportedPolicyResolution = ProductionFacilityCaptureResolutionService.Resolve(
+    sameOwnerTransfer03e,
+    captureBuildings,
+    captureProfiles,
+    captureQueues,
+    (ProductionCaptureQueuePolicy)999);
+Expect(!unsupportedPolicyResolution.Success, "03E accepted an unsupported capture queue policy.");
+Expect(unsupportedPolicyResolution.FailureReason == ProductionFacilityCaptureResolutionFailureReason.UnsupportedPolicy, "03E unsupported policy returned the wrong failure.");
+Expect(captureQueueA.Orders.Count == queueCountBeforeInconsistentCapture, "03E unsupported policy modified a queue.");
+
+var atomicBarracksA = new BuildingState(
+    "capture-atomic-a",
+    "Barracks",
+    "red",
+    "capture-red-sector",
+    new WorldPoint(18f, -3f),
+    2f);
+var atomicBarracksB = new BuildingState(
+    "capture-atomic-b",
+    "Barracks",
+    "blue",
+    "capture-red-sector",
+    new WorldPoint(18f, 3f),
+    2f);
+var atomicBuildings = new[] { atomicBarracksA, atomicBarracksB };
+var atomicQueues = new List<ProductionQueue>();
+var atomicRedEconomy = new EconomyState("red", 100);
+var atomicBlueEconomy = new EconomyState("blue", 100);
+Expect(EnqueueCaptureOrder("capture-atomic-red-order", "capture-atomic-red-reinforcement", atomicBarracksA.BuildingId, "red", atomicRedEconomy, "capture-other-sector", new WorldPoint(30f, 0f), atomicQueues, atomicBuildings, Array.Empty<ReadyReinforcement>()).Success, "03E atomic valid queue fixture did not enqueue.");
+Expect(EnqueueCaptureOrder("capture-atomic-blue-order", "capture-atomic-blue-reinforcement", atomicBarracksB.BuildingId, "blue", atomicBlueEconomy, "capture-blue-sector", new WorldPoint(0f, 0f), atomicQueues, atomicBuildings, Array.Empty<ReadyReinforcement>()).Success, "03E atomic contradictory queue fixture did not enqueue.");
+atomicBarracksA.TransferOwnershipTo("blue");
+var atomicCaptureResult = new SectorBuildingTransferResult(
+    "capture-red-sector",
+    "red",
+    "blue",
+    true,
+    new[] { atomicBarracksA.BuildingId, atomicBarracksB.BuildingId });
+var atomicFailure = ProductionFacilityCaptureResolutionService.Resolve(
+    atomicCaptureResult,
+    atomicBuildings,
+    captureProfiles,
+    atomicQueues,
+    ProductionCaptureQueuePolicy.CancelWithoutRefund);
+Expect(!atomicFailure.Success, "03E multi-facility prevalidation accepted contradictory linkage.");
+Expect(atomicFailure.FailureReason == ProductionFacilityCaptureResolutionFailureReason.InconsistentQueueLinkage, "03E multi-facility prevalidation returned the wrong failure.");
+Expect(atomicQueues[0].Orders.Count == 1, "03E multi-facility prevalidation partially cancelled the valid first queue.");
+Expect(atomicQueues[0].CurrentOrder!.OrderId == "capture-atomic-red-order", "03E multi-facility prevalidation replaced the valid first order.");
+Expect(atomicQueues[1].Orders.Count == 1, "03E multi-facility prevalidation changed the contradictory second queue.");
+ExpectThrows<ArgumentNullException>(
+    () => ProductionFacilityCaptureResolutionService.Resolve(null!, captureBuildings, captureProfiles, captureQueues, ProductionCaptureQueuePolicy.CancelWithoutRefund),
+    "03E accepted a null capture result.");
+ExpectThrows<ArgumentNullException>(
+    () => ProductionFacilityCaptureResolutionService.Resolve(captureTransfer, null!, captureProfiles, captureQueues, ProductionCaptureQueuePolicy.CancelWithoutRefund),
+    "03E accepted null completed buildings.");
+ExpectThrows<ArgumentNullException>(
+    () => ProductionFacilityCaptureResolutionService.Resolve(captureTransfer, captureBuildings, null!, captureQueues, ProductionCaptureQueuePolicy.CancelWithoutRefund),
+    "03E accepted null facility profiles.");
+ExpectThrows<ArgumentNullException>(
+    () => ProductionFacilityCaptureResolutionService.Resolve(captureTransfer, captureBuildings, captureProfiles, null!, ProductionCaptureQueuePolicy.CancelWithoutRefund),
+    "03E accepted null production queues.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver

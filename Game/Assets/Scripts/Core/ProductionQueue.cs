@@ -88,5 +88,12 @@ namespace IronTrenches.Core
             orders.RemoveAt(0);
             return current;
         }
+
+        internal IReadOnlyList<ProductionOrder> CancelAll()
+        {
+            var cancelled = new List<ProductionOrder>(orders);
+            orders.Clear();
+            return cancelled.AsReadOnly();
+        }
     }
 }

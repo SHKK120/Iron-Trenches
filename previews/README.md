@@ -3,7 +3,8 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_CORE_03D_RouteThreatInterdiction.html`: 현재 Route Threat + Interdiction + Isolation Semantics 기술 Preview
+- `RTS_CORE_03E_ProductionCaptureQueue.html`: 현재 Production Facility Capture + Queue Resolution 기술 Preview
+- `RTS_CORE_03D_RouteThreatInterdiction.html`: 이전 Route Threat + Interdiction + Isolation Semantics 기술 Preview
 - `RTS_CORE_03C_ProductionReinforcement.html`: 이전 Production + Reinforcement Source Integration 기술 Preview
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`: 이전 Terrain Movement + Road Network + Physical Reinforcement 기술 Preview
 - `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`: 사람 Gameplay Validation을 통과한 Terrain + Road + Physical Reinforcement Microgame
@@ -14,7 +15,16 @@
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## RTS-CORE-03D 현재 기술 시나리오
+## RTS-CORE-03E 현재 기술 시나리오
+
+- 기존 Territory Building Capture 결과를 사용해 완공 생산시설의 새 소유 진영 이전을 표시
+- `[시험 규칙]` 점령된 생산시설의 진행 중·대기 중 생산 작업을 모두 취소하고 진행도를 소실
+- 기존 소유 진영 환불 없음, 새 소유 진영에 기존 대기열·생산물 자동 이전 없음
+- 점령 전 생산 완료된 출발 대기 병력과 이미 이동 중인 병력은 기존 진영과 객체를 유지
+- 점령 뒤 새 소유 진영은 빈 대기열에서 정상 비용을 지불하고 새 생산을 즉시 시작 가능
+- Q-015는 사람 확인 전까지 `[미정]`, 완료 병력의 최종 처리는 Q-018 `[미정]`
+
+## RTS-CORE-03D 이전 기술 시나리오
 
 - 적 이동형 위협과 고착형 위협은 도로를 삭제하거나 통행 불가로 만들지 않고 경로 위험 점수에만 반영
 - 북쪽 빠른 길과 남쪽 안전한 길의 이동 시간·위험 점수를 함께 비교해 현재 시험 Profile에서 더 나은 경로 선택
@@ -77,7 +87,8 @@
 
 - 순수 C# Core와 `ManagedPcChecks`가 기술 정본이다.
 - `RTS_CORE_03A_SupplyConnectivity.html`은 Supply 규칙과 연결 판독용 Preview다.
-- `RTS_CORE_03D_RouteThreatInterdiction.html`은 실제 C# Route Threat 평가, 안전 경로 선호, 위험 경로 강행과 완전 고립을 구분하는 현재 기술 Preview다.
+- `RTS_CORE_03E_ProductionCaptureQueue.html`은 완공 생산시설 점령, 기존 Queue 취소·환불 없음과 Ready/EnRoute 보존을 확인하는 현재 기술 Preview다.
+- `RTS_CORE_03D_RouteThreatInterdiction.html`은 실제 C# Route Threat 평가, 안전 경로 선호, 위험 경로 강행과 완전 고립을 구분하는 이전 기술 Preview다.
 - `RTS_CORE_03C_ProductionReinforcement.html`은 Production→Ready At Source→기존 Dispatch 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_CORE_03B_TerrainRoadReinforcement.html`은 Terrain/Road/Reinforcement 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_PLAYTEST_03A_SupplyStrategy.html`은 단순 Supply Cut을 시험했던 이전 비정본 Gameplay Layer다.
