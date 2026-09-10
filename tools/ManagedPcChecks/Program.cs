@@ -1921,6 +1921,650 @@ var restoredDispatch = ReinforcementDispatchService.Dispatch(
 Expect(restoredDispatch.Success, "Restored strategic route did not allow a new dispatch.");
 Expect(restoredDispatch.Transit!.State == ReinforcementState.EnRoute, "Restored dispatch did not begin physical transit.");
 
+// RTS-CORE-03C: Production completes at its Building source before physical dispatch.
+var rifleSquadProduction = new ProductionDefinition("rifle-squad", 50, 12f, 10f);
+Expect(rifleSquadProduction.UnitTypeId == "rifle-squad", "Production unit type was not retained.");
+Expect(rifleSquadProduction.PrototypeCost == 50, "Prototype production cost was not retained.");
+Expect(rifleSquadProduction.ProductionSeconds == 12f, "Production seconds were not retained.");
+Expect(rifleSquadProduction.BaseMovementSpeed == 10f, "Production movement speed was not retained.");
+ExpectThrows<ArgumentException>(
+    () => new ProductionDefinition(" ", 50, 12f, 10f),
+    "Blank production unit type was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("negative-cost", -1, 12f, 10f),
+    "Negative production cost was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("zero-time", 0, 0f, 10f),
+    "Zero production time was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("negative-time", 0, -1f, 10f),
+    "Negative production time was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("nan-time", 0, float.NaN, 10f),
+    "NaN production time was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("infinite-time", 0, float.PositiveInfinity, 10f),
+    "Infinite production time was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("zero-speed", 0, 12f, 0f),
+    "Zero production movement speed was accepted.");
+ExpectThrows<ArgumentOutOfRangeException>(
+    () => new ProductionDefinition("nan-speed", 0, 12f, float.NaN),
+    "NaN production movement speed was accepted.");
+
+var barracksProduction = new ProductionFacilityProfile("barracks", new[] { "rifle-squad" });
+var depotProduction = new ProductionFacilityProfile("depot", Array.Empty<string>());
+Expect(barracksProduction.BuildingTypeId == "barracks", "Facility profile building type was not retained.");
+Expect(barracksProduction.CanProduce("rifle-squad"), "Barracks could not produce its registered squad.");
+Expect(!depotProduction.CanProduce("rifle-squad"), "Depot unexpectedly produced a rifle squad.");
+Expect(barracksProduction.ProducibleUnitTypeIds.Count == 1, "Facility unit type count was incorrect.");
+ExpectThrows<ArgumentException>(
+    () => new ProductionFacilityProfile(" ", new[] { "rifle-squad" }),
+    "Blank facility building type was accepted.");
+ExpectThrows<ArgumentException>(
+    () => new ProductionFacilityProfile("duplicate-barracks", new[] { "rifle-squad", "rifle-squad" }),
+    "Duplicate producible unit type was accepted.");
+
+var productionTopology = new SectorTopology();
+productionTopology.RegisterSector("production-rear");
+productionTopology.RegisterSector("production-middle");
+productionTopology.RegisterSector("production-front");
+productionTopology.AddBidirectionalAdjacency("production-rear", "production-middle");
+productionTopology.AddBidirectionalAdjacency("production-middle", "production-front");
+var productionRearSector = new SectorState("production-rear", "blue");
+var productionMiddleSector = new SectorState("production-middle", "blue");
+var productionFrontSector = new SectorState("production-front", "blue");
+var productionTerritory = new TerritoryGraph(
+    productionTopology,
+    new[] { productionRearSector, productionMiddleSector, productionFrontSector },
+    new[]
+    {
+        new SectorControlAnchor("production-anchor-rear", "production-rear"),
+        new SectorControlAnchor("production-anchor-middle", "production-middle"),
+        new SectorControlAnchor("production-anchor-front", "production-front")
+    });
+var barracksPosition = new WorldPoint(10f, 20f);
+var productionJunction = new WorldPoint(60f, 20f);
+var productionDestination = new WorldPoint(110f, 20f);
+var blueBarracks = new BuildingState(
+    "production-barracks",
+    "barracks",
+    "blue",
+    "production-rear",
+    barracksPosition,
+    5f);
+var redBarracks = new BuildingState(
+    "red-production-barracks",
+    "barracks",
+    "red",
+    "production-rear",
+    new WorldPoint(20f, 40f),
+    5f);
+var blueDepot = new BuildingState(
+    "production-depot",
+    "depot",
+    "blue",
+    "production-rear",
+    new WorldPoint(30f, 40f),
+    5f);
+var productionBuildings = new List<BuildingState> { blueBarracks, redBarracks, blueDepot };
+var incompleteBarracks = new ConstructionSite(
+    "production-site",
+    "barracks",
+    "blue",
+    "production-rear",
+    new WorldPoint(35f, 15f),
+    5f);
+var productionSites = new List<ConstructionSite> { incompleteBarracks };
+var productionDefinitions = new[] { rifleSquadProduction };
+var productionProfiles = new[] { barracksProduction, depotProduction };
+var productionEconomy = new EconomyState("blue", 500);
+var productionQueues = new List<ProductionQueue>();
+var readyAtSource = new List<ReadyReinforcement>();
+
+ProductionRequest CreateProductionRequest(string orderId, string reinforcementId)
+{
+    return new ProductionRequest(
+        orderId,
+        reinforcementId,
+        blueBarracks.BuildingId,
+        "blue",
+        "rifle-squad",
+        "production-front",
+        productionDestination);
+}
+
+var enqueueA = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-a", "produced-reinforcement-a"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(enqueueA.Success, "Valid production request did not enqueue.");
+Expect(enqueueA.PreviousBalance == 500 && enqueueA.NewBalance == 450, "Production cost result was incorrect.");
+Expect(productionEconomy.Balance == 450, "Production cost was not deducted on enqueue.");
+Expect(productionQueues.Count == 1, "Production queue was not created for the facility.");
+Expect(productionQueues[0].FacilityBuildingId == blueBarracks.BuildingId, "Production queue facility id was incorrect.");
+Expect(productionQueues[0].Orders.Count == 1, "First production order was not queued.");
+Expect(productionQueues[0].CurrentOrder!.OrderId == "production-order-a", "FIFO head was not the first order.");
+
+var enqueueB = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-b", "produced-reinforcement-b"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+var enqueueC = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-c", "produced-reinforcement-c"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(enqueueB.Success && enqueueC.Success, "FIFO follow-up orders did not enqueue.");
+Expect(productionQueues[0].Orders.Count == 3, "FIFO queue did not retain three orders.");
+Expect(productionEconomy.Balance == 350, "Three production costs were not deducted exactly once.");
+
+var queueCountBeforeFailure = productionQueues[0].Orders.Count;
+var balanceBeforeFailure = productionEconomy.Balance;
+var duplicateOrder = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-a", "produced-reinforcement-duplicate-order"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!duplicateOrder.Success && duplicateOrder.FailureReason == ProductionEnqueueFailureReason.DuplicateOrderId, "Duplicate order id was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Duplicate order failure was not atomic.");
+
+var duplicateReinforcement = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-duplicate-reinforcement", "produced-reinforcement-a"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!duplicateReinforcement.Success && duplicateReinforcement.FailureReason == ProductionEnqueueFailureReason.DuplicateReinforcementId, "Duplicate reinforcement id was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Duplicate reinforcement failure was not atomic.");
+
+var enemyFacilityRequest = new ProductionRequest(
+    "production-order-enemy",
+    "produced-reinforcement-enemy",
+    redBarracks.BuildingId,
+    "blue",
+    "rifle-squad",
+    "production-front",
+    productionDestination);
+var enemyFacilityResult = ProductionService.Enqueue(
+    enemyFacilityRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!enemyFacilityResult.Success && enemyFacilityResult.FailureReason == ProductionEnqueueFailureReason.EnemyFacility, "Enemy production facility was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Enemy facility failure was not atomic.");
+
+var depotRequest = new ProductionRequest(
+    "production-order-depot",
+    "produced-reinforcement-depot",
+    blueDepot.BuildingId,
+    "blue",
+    "rifle-squad",
+    "production-front",
+    productionDestination);
+var depotResult = ProductionService.Enqueue(
+    depotRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!depotResult.Success && depotResult.FailureReason == ProductionEnqueueFailureReason.UnsupportedUnitType, "Non-producing Depot was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Unsupported facility failure was not atomic.");
+
+var incompleteRequest = new ProductionRequest(
+    "production-order-site",
+    "produced-reinforcement-site",
+    incompleteBarracks.SiteId,
+    "blue",
+    "rifle-squad",
+    "production-front",
+    productionDestination);
+var incompleteResult = ProductionService.Enqueue(
+    incompleteRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!incompleteResult.Success && incompleteResult.FailureReason == ProductionEnqueueFailureReason.FacilityIncomplete, "ConstructionSite produced a unit.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Incomplete facility failure was not atomic.");
+
+var unknownFacilityRequest = new ProductionRequest(
+    "production-order-missing",
+    "produced-reinforcement-missing",
+    "missing-building",
+    "blue",
+    "rifle-squad",
+    "production-front",
+    productionDestination);
+var unknownFacilityResult = ProductionService.Enqueue(
+    unknownFacilityRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!unknownFacilityResult.Success && unknownFacilityResult.FailureReason == ProductionEnqueueFailureReason.UnknownFacility, "Unknown production facility was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Unknown facility failure was not atomic.");
+
+var invalidDestinationRequest = new ProductionRequest(
+    "production-order-invalid-position",
+    "produced-reinforcement-invalid-position",
+    blueBarracks.BuildingId,
+    "blue",
+    "rifle-squad",
+    "production-front",
+    new WorldPoint(float.NaN, 20f));
+var invalidDestinationResult = ProductionService.Enqueue(
+    invalidDestinationRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!invalidDestinationResult.Success && invalidDestinationResult.FailureReason == ProductionEnqueueFailureReason.InvalidDestination, "Invalid production destination was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Invalid destination failure was not atomic.");
+
+var unknownDestinationRequest = new ProductionRequest(
+    "production-order-unknown-destination",
+    "produced-reinforcement-unknown-destination",
+    blueBarracks.BuildingId,
+    "blue",
+    "rifle-squad",
+    "missing-sector",
+    productionDestination);
+var unknownDestinationResult = ProductionService.Enqueue(
+    unknownDestinationRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!unknownDestinationResult.Success && unknownDestinationResult.FailureReason == ProductionEnqueueFailureReason.UnknownDestinationSector, "Unknown production destination sector was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Unknown destination failure was not atomic.");
+
+var poorEconomy = new EconomyState("blue", 49);
+var poorQueues = new List<ProductionQueue>();
+var productionInsufficientResult = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-poor", "produced-reinforcement-poor"),
+    productionTerritory,
+    poorEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    poorQueues,
+    readyAtSource);
+Expect(!productionInsufficientResult.Success && productionInsufficientResult.FailureReason == ProductionEnqueueFailureReason.InsufficientFunds, "Insufficient production funds were not rejected.");
+Expect(poorEconomy.Balance == 49 && poorQueues.Count == 0, "Insufficient funds failure was not atomic.");
+
+var ghostProfile = new ProductionFacilityProfile("barracks", new[] { "rifle-squad", "ghost-squad" });
+var unknownUnitRequest = new ProductionRequest(
+    "production-order-ghost",
+    "produced-reinforcement-ghost",
+    blueBarracks.BuildingId,
+    "blue",
+    "ghost-squad",
+    "production-front",
+    productionDestination);
+var unknownUnitResult = ProductionService.Enqueue(
+    unknownUnitRequest,
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    new[] { ghostProfile, depotProduction },
+    productionQueues,
+    readyAtSource);
+Expect(!unknownUnitResult.Success && unknownUnitResult.FailureReason == ProductionEnqueueFailureReason.UnknownUnitType, "Unknown unit definition was not rejected.");
+Expect(productionEconomy.Balance == balanceBeforeFailure && productionQueues[0].Orders.Count == queueCountBeforeFailure, "Unknown unit failure was not atomic.");
+
+var queue = productionQueues[0];
+var partialFive = ProductionAdvanceService.Advance(queue, blueBarracks, 5f, readyAtSource);
+Expect(partialFive.Success && partialFive.CompletedReinforcements.Count == 0, "Partial production advance completed too early.");
+Expect(queue.CurrentOrder!.OrderId == "production-order-a" && queue.CurrentOrder.ProgressSeconds == 5f, "First order did not receive explicit progress.");
+Expect(queue.Orders[1].ProgressSeconds == 0f && queue.Orders[2].ProgressSeconds == 0f, "FIFO advanced later orders before the first.");
+var partialEleven = ProductionAdvanceService.Advance(queue, blueBarracks, 6f, readyAtSource);
+Expect(partialEleven.Success && queue.CurrentOrder!.ProgressSeconds == 11f, "Eleven seconds of production progress were incorrect.");
+Expect(readyAtSource.Count == 0, "Production completed before its full explicit duration.");
+var overshootAdvance = ProductionAdvanceService.Advance(queue, blueBarracks, 6f, readyAtSource);
+Expect(overshootAdvance.Success && overshootAdvance.CompletedReinforcements.Count == 1, "Overshoot did not complete the first order.");
+Expect(queue.CurrentOrder!.OrderId == "production-order-b", "FIFO did not move to the second order.");
+Expect(queue.CurrentOrder.ProgressSeconds == 5f, "Overshoot remainder was not applied to the second order.");
+Expect(readyAtSource.Count == 1, "Completed production did not create one ready reinforcement.");
+var readyA = readyAtSource[0];
+Expect(readyA.ReinforcementId == "produced-reinforcement-a", "Ready reinforcement id changed after production.");
+Expect(readyA.OrderId == "production-order-a", "Ready reinforcement lost its order id.");
+Expect(readyA.UnitTypeId == "rifle-squad", "Ready reinforcement lost its unit type.");
+Expect(readyA.SourceBuildingId == blueBarracks.BuildingId, "Ready source building was not the completed facility.");
+Expect(readyA.SourceSectorId == blueBarracks.SectorId, "Ready source sector was not derived from BuildingState.");
+Expect(readyA.SourcePosition.X == blueBarracks.Position.X && readyA.SourcePosition.Z == blueBarracks.Position.Z, "Ready source position was not the actual BuildingState position.");
+Expect(readyA.DestinationSectorId == "production-front", "Ready destination sector was not retained.");
+Expect(readyA.DestinationPosition.X == productionDestination.X, "Ready destination position was not retained.");
+Expect(readyA.BaseMovementSpeed == rifleSquadProduction.BaseMovementSpeed, "Ready movement speed was not derived from its definition.");
+Expect(readyAtSource.All(item => item.ReinforcementId != "arrived"), "Production completion created a front arrival marker.");
+
+var completeSecond = ProductionAdvanceService.Advance(queue, blueBarracks, 7f, readyAtSource);
+Expect(completeSecond.Success && completeSecond.CompletedReinforcements.Count == 1, "Second FIFO order did not complete after its remaining time.");
+Expect(queue.CurrentOrder!.OrderId == "production-order-c" && queue.CurrentOrder.ProgressSeconds == 0f, "Third order did not remain untouched after exact completion.");
+var readyB = readyAtSource.Single(item => item.OrderId == "production-order-b");
+
+var ownershipQueueEconomy = new EconomyState("blue", 100);
+var ownershipQueues = new List<ProductionQueue>();
+var ownershipReady = new List<ReadyReinforcement>();
+var ownershipEnqueue = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-owner", "produced-reinforcement-owner"),
+    productionTerritory,
+    ownershipQueueEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    ownershipQueues,
+    ownershipReady);
+Expect(ownershipEnqueue.Success, "Ownership-conflict fixture did not enqueue.");
+blueBarracks.TransferOwnershipTo("red");
+var ownershipAdvance = ProductionAdvanceService.Advance(ownershipQueues[0], blueBarracks, 12f, ownershipReady);
+Expect(!ownershipAdvance.Success && ownershipAdvance.FailureReason == ProductionAdvanceFailureReason.OwnershipConflict, "Captured facility did not block production safely.");
+Expect(ownershipQueues[0].Orders.Count == 1 && ownershipQueues[0].CurrentOrder!.ProgressSeconds == 0f, "Ownership conflict changed or deleted the queue.");
+Expect(ownershipReady.Count == 0, "Captured queue auto-converted into new-owner troops.");
+blueBarracks.TransferOwnershipTo("blue");
+
+var productionRoads = new RoadNetwork();
+productionRoads.Register(new RoadSegment(
+    "production-road-a",
+    barracksPosition,
+    productionJunction,
+    4f,
+    new[] { "production-rear", "production-middle" }));
+productionRoads.Register(new RoadSegment(
+    "production-road-b",
+    productionJunction,
+    productionDestination,
+    4f,
+    new[] { "production-middle", "production-front" }));
+var productionTerrain = new RectangularTerrainMovementResolver(new TerrainMovementProfile("Open", 1f));
+var productionRoadPlanner = new ReinforcementRoutePlanner(
+    productionRoads,
+    new RoadMovementProfile(1.4f),
+    productionTerrain);
+var productionSupplySource = new SupplySourceDefinition(
+    "production-rear-source",
+    "blue",
+    "production-rear");
+var productionSuppliedSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+var producedTransits = new List<ReinforcementTransit>();
+var readyCountBeforeRoadDispatch = readyAtSource.Count;
+var integratedRoadDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    readyA,
+    productionBuildings,
+    productionTerritory,
+    productionSuppliedSnapshot,
+    productionRoadPlanner,
+    readyAtSource,
+    producedTransits);
+Expect(integratedRoadDispatch.Success, "Ready reinforcement did not integrate with 03B dispatch.");
+Expect(readyAtSource.Count == readyCountBeforeRoadDispatch - 1, "Successful dispatch did not leave Ready At Source exactly once.");
+Expect(producedTransits.Count == 1, "Successful production dispatch did not create one transit.");
+var producedRoadTransit = integratedRoadDispatch.Transit!;
+Expect(producedRoadTransit.ReinforcementId == readyA.ReinforcementId, "Integration changed the reinforcement id.");
+Expect(producedRoadTransit.State == ReinforcementState.EnRoute, "Integrated reinforcement did not begin EnRoute.");
+Expect(producedRoadTransit.Route.Source.X == blueBarracks.Position.X && producedRoadTransit.Route.Source.Z == blueBarracks.Position.Z, "Physical route did not start at the actual Building position.");
+Expect(producedRoadTransit.Route.Legs.All(item => item.Surface == ReinforcementRouteSurface.Road), "Connected Building road did not receive Road Preferred routing.");
+Expect(producedRoadTransit.CurrentPosition.X == blueBarracks.Position.X, "Dispatch started away from the production facility.");
+producedRoadTransit.Advance(1f);
+Expect(producedRoadTransit.State == ReinforcementState.EnRoute, "Produced transit arrived without traversing its route.");
+Expect(producedRoadTransit.CurrentPosition.X > blueBarracks.Position.X, "Produced transit did not move from the Building position.");
+producedRoadTransit.Advance(20f);
+Expect(producedRoadTransit.State == ReinforcementState.Arrived, "Produced reinforcement did not arrive after full physical movement.");
+Expect(producedRoadTransit.CurrentPosition.X == productionDestination.X, "Produced reinforcement arrived at the wrong position.");
+
+var productionOffroadPlanner = new ReinforcementRoutePlanner(
+    new RoadNetwork(),
+    new RoadMovementProfile(1.4f),
+    new RectangularTerrainMovementResolver(new TerrainMovementProfile("Forest", 0.7f)));
+var readyCountBeforeOffroadDispatch = readyAtSource.Count;
+var integratedOffroadDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    readyB,
+    productionBuildings,
+    productionTerritory,
+    productionSuppliedSnapshot,
+    productionOffroadPlanner,
+    readyAtSource,
+    producedTransits);
+Expect(integratedOffroadDispatch.Success, "Ready reinforcement did not use Offroad fallback.");
+Expect(readyAtSource.Count == readyCountBeforeOffroadDispatch - 1, "Offroad dispatch did not remove one ready reinforcement.");
+var producedOffroadTransit = integratedOffroadDispatch.Transit!;
+Expect(producedOffroadTransit.Route.Legs.Count == 1, "Offroad fallback did not create a direct route.");
+Expect(producedOffroadTransit.Route.Legs[0].Surface == ReinforcementRouteSurface.Offroad, "Offroad fallback used a Road leg.");
+Expect(producedOffroadTransit.Route.Legs[0].MovementMultiplier == 0.7f, "Offroad fallback did not retain Terrain movement.");
+producedOffroadTransit.Advance(1f);
+var producedOffroadPosition = producedOffroadTransit.CurrentPosition;
+producedOffroadTransit.MarkDestroyedEnRoute();
+Expect(producedOffroadTransit.State == ReinforcementState.DestroyedEnRoute, "Produced reinforcement was not destroyed en route.");
+producedOffroadTransit.Advance(100f);
+Expect(producedOffroadTransit.State == ReinforcementState.DestroyedEnRoute, "Destroyed produced reinforcement later arrived.");
+Expect(producedOffroadTransit.CurrentPosition.X == producedOffroadPosition.X, "Destroyed produced reinforcement kept moving.");
+Expect(productionSuppliedSnapshot.GetStatus("production-front") == SectorSupplyStatus.Supplied, "Physical production interdiction changed Strategic Supply.");
+
+var completeThird = ProductionAdvanceService.Advance(queue, blueBarracks, 12f, readyAtSource);
+Expect(completeThird.Success && completeThird.CompletedReinforcements.Count == 1, "Third production order did not complete.");
+Expect(queue.Orders.Count == 0, "Completed FIFO queue was not empty.");
+var readyC = readyAtSource.Single(item => item.OrderId == "production-order-c");
+var completedOrderDuplicate = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-a", "produced-reinforcement-after-complete"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!completedOrderDuplicate.Success && completedOrderDuplicate.FailureReason == ProductionEnqueueFailureReason.DuplicateOrderId, "Completed production order id was reusable.");
+var completedReinforcementDuplicate = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-after-complete", "produced-reinforcement-a"),
+    productionTerritory,
+    productionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    productionQueues,
+    readyAtSource);
+Expect(!completedReinforcementDuplicate.Success && completedReinforcementDuplicate.FailureReason == ProductionEnqueueFailureReason.DuplicateReinforcementId, "Completed reinforcement id was reusable.");
+productionMiddleSector.TransferOwnershipTo("red");
+var productionCutOffSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+Expect(productionCutOffSnapshot.GetStatus("production-front") == SectorSupplyStatus.CutOff, "Production Front was not Cut Off after corridor loss.");
+var readyCountBeforeBlockedDispatch = readyAtSource.Count;
+var transitCountBeforeBlockedDispatch = producedTransits.Count;
+var blockedReadyDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    readyC,
+    productionBuildings,
+    productionTerritory,
+    productionCutOffSnapshot,
+    productionRoadPlanner,
+    readyAtSource,
+    producedTransits);
+Expect(!blockedReadyDispatch.Success, "CutOff accepted a produced reinforcement dispatch.");
+Expect(blockedReadyDispatch.FailureReason == ProductionReinforcementIntegrationFailureReason.DispatchRejected, "CutOff integration failure reason was incorrect.");
+Expect(blockedReadyDispatch.DispatchFailureReason == ReinforcementDispatchFailureReason.DestinationCutOff, "CutOff did not preserve the 03B dispatch reason.");
+Expect(readyAtSource.Count == readyCountBeforeBlockedDispatch && readyAtSource.Contains(readyC), "CutOff deleted the Ready At Source reinforcement.");
+Expect(producedTransits.Count == transitCountBeforeBlockedDispatch, "CutOff created a transit despite dispatch rejection.");
+
+var cutOffProductionEconomy = new EconomyState("blue", 100);
+var cutOffProductionQueues = new List<ProductionQueue>();
+var cutOffReady = new List<ReadyReinforcement>();
+var cutOffProductionEnqueue = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-cutoff", "produced-reinforcement-cutoff"),
+    productionTerritory,
+    cutOffProductionEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    cutOffProductionQueues,
+    cutOffReady);
+Expect(cutOffProductionEnqueue.Success, "Strategic CutOff incorrectly blocked the prototype production queue.");
+var cutOffProductionAdvance = ProductionAdvanceService.Advance(
+    cutOffProductionQueues[0],
+    blueBarracks,
+    12f,
+    cutOffReady);
+Expect(cutOffProductionAdvance.Success && cutOffReady.Count == 1, "CutOff production did not reach Ready At Source.");
+Expect(cutOffReady[0].SourcePosition.X == blueBarracks.Position.X, "CutOff-produced reinforcement lost its Building position.");
+var cutOffProducedDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    cutOffReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionCutOffSnapshot,
+    productionRoadPlanner,
+    cutOffReady,
+    producedTransits);
+Expect(!cutOffProducedDispatch.Success && cutOffReady.Count == 1, "CutOff-produced Ready reinforcement was not retained.");
+
+productionMiddleSector.TransferOwnershipTo("blue");
+var productionRestoredSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+var restoredReadyDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    readyC,
+    productionBuildings,
+    productionTerritory,
+    productionRestoredSnapshot,
+    productionRoadPlanner,
+    readyAtSource,
+    producedTransits);
+Expect(restoredReadyDispatch.Success, "Restored Supply did not dispatch the same Ready reinforcement.");
+Expect(restoredReadyDispatch.Transit!.ReinforcementId == readyC.ReinforcementId, "Restore dispatch created a different reinforcement id.");
+Expect(!readyAtSource.Contains(readyC), "Restored dispatch left a duplicate Ready reinforcement.");
+Expect(restoredReadyDispatch.Transit.State == ReinforcementState.EnRoute, "Restored Ready reinforcement did not become EnRoute.");
+
+var cutOffRestoredDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    cutOffReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionRestoredSnapshot,
+    productionRoadPlanner,
+    cutOffReady,
+    producedTransits);
+Expect(cutOffRestoredDispatch.Success && cutOffReady.Count == 0, "Supply restore did not release the CutOff-produced reinforcement.");
+
+var capturedReadyEconomy = new EconomyState("blue", 100);
+var capturedReadyQueues = new List<ProductionQueue>();
+var capturedReady = new List<ReadyReinforcement>();
+var capturedReadyEnqueue = ProductionService.Enqueue(
+    CreateProductionRequest("production-order-ready-capture", "produced-reinforcement-ready-capture"),
+    productionTerritory,
+    capturedReadyEconomy,
+    productionBuildings,
+    productionSites,
+    productionDefinitions,
+    productionProfiles,
+    capturedReadyQueues,
+    capturedReady);
+Expect(capturedReadyEnqueue.Success, "Ready capture fixture did not enqueue.");
+ProductionAdvanceService.Advance(capturedReadyQueues[0], blueBarracks, 12f, capturedReady);
+Expect(capturedReady.Count == 1, "Ready capture fixture did not complete production.");
+blueBarracks.TransferOwnershipTo("red");
+var capturedSourceDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    capturedReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionRestoredSnapshot,
+    productionRoadPlanner,
+    capturedReady,
+    producedTransits);
+Expect(!capturedSourceDispatch.Success && capturedSourceDispatch.FailureReason == ProductionReinforcementIntegrationFailureReason.SourceOwnershipConflict, "Captured source did not block Ready dispatch safely.");
+Expect(capturedReady.Count == 1, "Captured source deleted or transferred the Ready reinforcement.");
+blueBarracks.TransferOwnershipTo("blue");
+
+productionFrontSector.TransferOwnershipTo("red");
+var productionDestinationLostSnapshot = StrategicSupplyResolver.Resolve(
+    productionTerritory,
+    "blue",
+    new[] { productionSupplySource });
+var lostDestinationDispatch = ProductionReinforcementIntegrationService.Dispatch(
+    capturedReady[0],
+    productionBuildings,
+    productionTerritory,
+    productionDestinationLostSnapshot,
+    productionRoadPlanner,
+    capturedReady,
+    producedTransits);
+Expect(!lostDestinationDispatch.Success && lostDestinationDispatch.DispatchFailureReason == ReinforcementDispatchFailureReason.DestinationNotOwned, "Lost destination did not reject Ready dispatch.");
+Expect(capturedReady.Count == 1, "Lost destination deleted the Ready reinforcement.");
+productionFrontSector.TransferOwnershipTo("blue");
+
+var productionIncomeProfiles = new[]
+{
+    new SectorIncomeProfile("production-rear", 10),
+    new SectorIncomeProfile("production-middle", 20),
+    new SectorIncomeProfile("production-front", 30)
+};
+var balanceBeforeProductionIncome = productionEconomy.Balance;
+var productionIncome = SectorIncomeCollector.Collect(
+    productionTerritory,
+    productionIncomeProfiles,
+    productionEconomy);
+Expect(productionIncome.CollectedAmount == 60, "Production integration changed ownership-based Sector Income.");
+Expect(productionEconomy.Balance == balanceBeforeProductionIncome + 60, "Production cost state did not remain compatible with income collection.");
+
 Console.WriteLine($"PASS ManagedPcChecks ({assertions} assertions)");
 
 sealed class RectangularSectorPlacementAreaResolver : ISectorPlacementAreaResolver

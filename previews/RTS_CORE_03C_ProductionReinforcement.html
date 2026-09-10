@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RTS-CORE-03C — 생산 및 증원 연결 프리뷰</title>
+  <style>
+    :root { color-scheme: dark; font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif; background: #090d0a; color: #f3eedb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 42% -15%, #384433, #121812 52%, #080b09); }
+    main { width: min(1260px, calc(100% - 28px)); margin: 20px auto 36px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 14px; }
+    .kicker { margin: 0 0 6px; color: #dcc66f; font-size: .72rem; font-weight: 900; letter-spacing: .13em; }
+    h1 { margin: 0; font-size: clamp(1.55rem, 3vw, 2.7rem); }
+    header > p { max-width: 590px; margin: 0; color: #abb5a6; line-height: 1.55; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 14px; }
+    .panel { overflow: hidden; border: 1px solid #475247; border-radius: 14px; background: rgba(17,24,18,.96); box-shadow: 0 18px 44px rgba(0,0,0,.26); }
+    canvas { width: 100%; height: auto; display: block; background: #30382e; }
+    .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #344034; }
+    .flow div { padding: 11px 7px; background: #141b15; text-align: center; }
+    .flow strong, .flow span { display: block; }
+    .flow strong { font-size: .76rem; }
+    .flow span { margin-top: 3px; color: #9eaa9d; font-size: .68rem; }
+    aside { display: grid; gap: 11px; align-content: start; }
+    .card { padding: 14px; border: 1px solid #3d493e; border-radius: 12px; background: #111812; }
+    h2 { margin: 0 0 9px; font-size: .94rem; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .metric { padding: 8px; border-radius: 8px; background: #0a100c; }
+    .metric span { display: block; color: #839083; font-size: .64rem; font-weight: 800; }
+    .metric strong { display: block; margin-top: 4px; font-size: .82rem; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    button { min-height: 42px; padding: 8px; border: 1px solid #687764; border-radius: 8px; background: #303b2e; color: #fff; font: inherit; font-size: .74rem; font-weight: 850; cursor: pointer; }
+    button:hover, button:focus-visible { border-color: #ead477; outline: none; background: #465242; }
+    button.danger { border-color: #8c5951; background: #482b28; }
+    button.restore { border-color: #49775f; background: #214333; }
+    .queue { min-height: 46px; margin: 0; padding-left: 20px; color: #b6c0b3; font-size: .73rem; line-height: 1.55; }
+    .note { margin: 0; color: #9da89b; font-size: .73rem; line-height: 1.55; }
+    .trial { color: #efd990; }
+    #eventLog { min-height: 68px; }
+    footer { margin-top: 12px; color: #768176; font-size: .7rem; }
+    @media (max-width: 930px) { header { align-items: start; flex-direction: column; } .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="kicker">기술 확인용 · 소스 전용</p><h1>RTS-CORE-03C 생산 및 증원 연결</h1></div>
+      <p>완공된 병영에서 생산한 분대가 출발 대기 상태를 거쳐 도로와 지형을 따라 실제 전선까지 이동하는지 확인합니다.</p>
+    </header>
+
+    <div class="layout">
+      <section class="panel" aria-label="생산시설과 증원 이동 전장">
+        <canvas id="field" width="900" height="500" aria-label="후방 병영, 중앙 회랑, 도로와 전선"></canvas>
+        <div class="flow" aria-label="생산 및 증원 상태 흐름">
+          <div><strong>생산 대기열</strong><span>명시적 시간 진행</span></div>
+          <div><strong>출발 대기</strong><span>실제 병영 위치</span></div>
+          <div><strong>이동 중</strong><span>도로 또는 비포장</span></div>
+          <div><strong>전선 도착</strong><span>경로 완료 뒤 전환</span></div>
+        </div>
+      </section>
+
+      <aside>
+        <section class="card">
+          <h2>현재 상태</h2>
+          <div class="metrics">
+            <div class="metric"><span>시험용 자원</span><strong id="resourceValue">200</strong></div>
+            <div class="metric"><span>생산 대기열</span><strong id="queueValue">0</strong></div>
+            <div class="metric"><span>현재 생산</span><strong id="productionValue">없음</strong></div>
+            <div class="metric"><span>출발 대기</span><strong id="readyValue">0</strong></div>
+            <div class="metric"><span>이동 중</span><strong id="transitValue">0</strong></div>
+            <div class="metric"><span>전선 도착</span><strong id="arrivedValue">0</strong></div>
+            <div class="metric"><span>보급 상태</span><strong id="supplyValue">연결됨</strong></div>
+            <div class="metric"><span>도로 상태</span><strong id="roadValue">사용 가능</strong></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>명시적 조작</h2>
+          <div class="actions">
+            <button id="enqueue">소총 분대 생산</button>
+            <button id="advanceFive">시간 5초 진행</button>
+            <button id="advanceTwenty">시간 20초 진행</button>
+            <button id="dispatch">출발 대기 병력 파견</button>
+            <button id="toggleRoad">도로 임시 비활성화</button>
+            <button id="intercept" class="danger">이동 중 병력 요격</button>
+            <button id="cut" class="danger">중앙 회랑 차단</button>
+            <button id="restore" class="restore">중앙 회랑 복구</button>
+            <button id="reset">전체 초기화</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>생산 대기열</h2>
+          <ol id="queueList" class="queue"><li>비어 있음</li></ol>
+          <p class="note trial">소총 분대 비용 50 · 생산 12초 · 아래 수치는 시험값이며 최종 밸런스가 아닙니다.</p>
+        </section>
+
+        <section class="card">
+          <h2>최근 기록</h2>
+          <ol id="eventLog" class="queue" aria-live="polite"></ol>
+          <p class="note">생산 완료는 전선 도착이 아닙니다. 보급 단절은 새 파견만 막고 출발 대기 병력을 삭제하지 않습니다.</p>
+        </section>
+      </aside>
+    </div>
+    <footer>도로는 이동 보너스만 제공하며 고유 엄폐·은폐가 없습니다 · 이동 중 경로 재탐색은 이번 범위에 포함하지 않습니다</footer>
+  </main>
+
+  <script>
+    const TRIAL={cost:50,productionSeconds:12,baseSpeed:48,roadMultiplier:1.4,offroadMultiplier:.7};
+    const POINTS={barracks:{x:105,y:250},junction:{x:450,y:250},front:{x:810,y:250},offroadMid:{x:450,y:385}};
+    const distance=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
+    const makeLeg=(a,b,surface,multiplier)=>({a:{...a},b:{...b},surface,multiplier,distance:distance(a,b)});
+    const roadRoute=()=>[makeLeg(POINTS.barracks,POINTS.junction,"도로",TRIAL.roadMultiplier),makeLeg(POINTS.junction,POINTS.front,"도로",TRIAL.roadMultiplier)];
+    const offroadRoute=()=>[makeLeg(POINTS.barracks,POINTS.offroadMid,"비포장",TRIAL.offroadMultiplier),makeLeg(POINTS.offroadMid,POINTS.front,"비포장",TRIAL.offroadMultiplier)];
+    function createState(){return{resource:200,queue:[],ready:[],transits:[],arrived:0,destroyed:0,connected:true,roadEnabled:true,nextOrder:1,events:["준비됨 · 생산 명령을 내려 보세요"]}}
+    function enqueue(state){if(state.resource<TRIAL.cost){state.events.unshift("자원 부족 · 생산 요청 거부");return null}const n=state.nextOrder++,order={id:`주문-${n}`,reinforcementId:`분대-${n}`,progress:0};state.resource-=TRIAL.cost;state.queue.push(order);state.events.unshift(`${order.id} · 생산 대기열 등록 · 자원 ${TRIAL.cost} 사용`);return order}
+    function advanceProduction(state,seconds){let remaining=seconds,completed=[];while(remaining>0&&state.queue.length){const order=state.queue[0],need=TRIAL.productionSeconds-order.progress,use=Math.min(remaining,need);order.progress+=use;remaining-=use;if(order.progress>=TRIAL.productionSeconds){state.queue.shift();const ready={id:order.reinforcementId,orderId:order.id,state:"출발 대기",position:{...POINTS.barracks}};state.ready.push(ready);completed.push(ready);state.events.unshift(`${ready.id} · 실제 병영 위치에서 출발 대기`)}}return completed}
+    function dispatchReady(state){const ready=state.ready[0];if(!ready){state.events.unshift("출발 대기 병력 없음");return null}if(!state.connected){state.events.unshift("보급 단절 · 같은 병력이 출발 대기로 유지됨");return null}state.ready.shift();const route=state.roadEnabled?roadRoute():offroadRoute(),transit={id:ready.id,state:"이동 중",route,legIndex:0,progress:0,position:{...ready.position}};state.transits.push(transit);state.events.unshift(`${transit.id} · ${state.roadEnabled?"도로 우선":"비포장 우회"} · 이동 시작`);return transit}
+    function advanceTransit(transit,seconds){if(transit.state!=="이동 중")return;let remaining=seconds;while(remaining>0&&transit.state==="이동 중"){const leg=transit.route[transit.legIndex],speed=TRIAL.baseSpeed*leg.multiplier,left=leg.distance-transit.progress,possible=speed*remaining;if(possible<left){transit.progress+=possible;remaining=0}else{remaining-=left/speed;transit.progress=0;transit.legIndex++;if(transit.legIndex>=transit.route.length){transit.legIndex=transit.route.length-1;transit.state="전선 도착";transit.position={...leg.b};break}}const active=transit.route[transit.legIndex],ratio=transit.progress/active.distance;transit.position={x:active.a.x+(active.b.x-active.a.x)*ratio,y:active.a.y+(active.b.y-active.a.y)*ratio}}}
+    function advanceTransits(state,seconds){for(const transit of state.transits){const before=transit.state;advanceTransit(transit,seconds);if(before==="이동 중"&&transit.state==="전선 도착"){state.arrived++;state.events.unshift(`${transit.id} · 실제 경로 완료 후 전선 도착`)}}}
+    function intercept(state){const target=state.transits.find(item=>item.state==="이동 중");if(!target){state.events.unshift("요격할 이동 중 병력 없음");return false}target.state="이동 중 요격됨";state.destroyed++;state.events.unshift(`${target.id} · 이동 중 요격됨 · 전선 도착 불가`);return true}
+    function cutCorridor(state){state.connected=false;state.events.unshift("중앙 회랑 차단 · 새 파견 불가 · 기존 병력 유지")}
+    function restoreCorridor(state){state.connected=true;state.events.unshift("중앙 회랑 복구 · 출발 대기 병력 파견 가능")}
+    function runStaticSmoke(){const checks=[],expect=(value,name)=>{if(!value)throw new Error(`03C 정적 검사 실패: ${name}`);checks.push(name)};let s=createState();expect(s.resource===200&&s.queue.length===0,"페이지 초기화");const order=enqueue(s);expect(order&&s.resource===150&&s.queue.length===1,"생산 요청과 경제 비용");advanceProduction(s,5);expect(s.queue[0].progress===5&&s.ready.length===0,"부분 시간 진행");advanceProduction(s,20);expect(s.queue.length===0&&s.ready.length===1,"생산 완료와 출발 대기 생성");expect(s.ready[0].position.x===POINTS.barracks.x,"실제 병영 위치 생성");const road=dispatchReady(s);expect(road&&road.state==="이동 중"&&road.route.every(x=>x.surface==="도로"),"파견과 도로 우선 경로");advanceTransit(road,1);expect(road.state==="이동 중"&&road.position.x>POINTS.barracks.x,"실제 이동 중");advanceTransits(s,20);expect(road.state==="전선 도착"&&s.arrived===1,"전선 도착");enqueue(s);advanceProduction(s,20);s.roadEnabled=false;const offroad=dispatchReady(s);expect(offroad&&offroad.route.every(x=>x.surface==="비포장"),"비포장 우회");expect(intercept(s)&&offroad.state==="이동 중 요격됨","이동 중 요격");enqueue(s);advanceProduction(s,20);const sameId=s.ready[0].id;cutCorridor(s);expect(dispatchReady(s)===null&&s.ready[0].id===sameId,"보급 단절 파견 차단과 출발 대기 유지");restoreCorridor(s);expect(dispatchReady(s)?.id===sameId,"복구 후 같은 병력 파견");s=createState();expect(s.resource===200&&s.ready.length===0&&s.connected,"전체 초기화");return{pass:true,checks}}
+    if(typeof window!=="undefined")window.__productionReinforcement03C={TRIAL,POINTS,createState,enqueue,advanceProduction,dispatchReady,advanceTransit,advanceTransits,intercept,cutCorridor,restoreCorridor,runStaticSmoke};
+    if(typeof document!=="undefined"){
+      const canvas=document.getElementById("field"),ctx=canvas.getContext("2d");let state=createState(),last=performance.now();
+      function line(a,b,color,width,dash=[]){ctx.save();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);ctx.lineCap="round";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore()}
+      function label(text,x,y,color="#f3eedb"){ctx.fillStyle=color;ctx.font="800 13px system-ui";ctx.textAlign="center";ctx.fillText(text,x,y)}
+      function drawWorld(){ctx.fillStyle="#485044";ctx.fillRect(0,0,900,500);ctx.fillStyle="#263e2d";ctx.fillRect(0,0,260,500);ctx.fillStyle=state.connected?"#4a4e42":"#553b38";ctx.fillRect(355,0,190,500);ctx.fillStyle="#343d35";ctx.fillRect(680,0,220,500);line(POINTS.barracks,POINTS.junction,"#24241f",20);line(POINTS.junction,POINTS.front,"#24241f",20);line(POINTS.barracks,POINTS.junction,state.connected?"#ddc467":"#a15e55",4,[13,8]);line(POINTS.junction,POINTS.front,state.connected?"#ddc467":"#a15e55",4,[13,8]);line(POINTS.barracks,POINTS.offroadMid,"rgba(215,226,211,.28)",3,[7,8]);line(POINTS.offroadMid,POINTS.front,"rgba(215,226,211,.28)",3,[7,8]);label("후방 생산지역",130,38);label(state.connected?"중앙 회랑 · 연결됨":"중앙 회랑 · 보급 단절",450,38,state.connected?"#f3eedb":"#ff9b8e");label("전선",790,38);ctx.fillStyle="#141a14";ctx.fillRect(64,205,82,70);ctx.strokeStyle="#e1cd83";ctx.lineWidth=3;ctx.strokeRect(64,205,82,70);label("병영",105,235);label("생산시설",105,257,"#b8c2b4");label("도로",450,225,"#f0d77a");label("비포장 우회",450,414,"#c3cec0")}
+      function token(item,color,labelText){ctx.fillStyle=color;ctx.beginPath();ctx.arc(item.position.x,item.position.y,11,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#10140f";ctx.lineWidth=2;ctx.stroke();label(labelText,item.position.x,item.position.y-17)}
+      function render(){drawWorld();for(const ready of state.ready)token(ready,"#79c9ee","출발 대기");for(const transit of state.transits){const color=transit.state==="이동 중 요격됨"?"#df665d":transit.state==="전선 도착"?"#72d79a":"#f2c95f";token(transit,color,transit.state)}const moving=state.transits.filter(x=>x.state==="이동 중").length;document.getElementById("resourceValue").textContent=state.resource;document.getElementById("queueValue").textContent=state.queue.length;document.getElementById("productionValue").textContent=state.queue.length?`${state.queue[0].progress.toFixed(1)} / ${TRIAL.productionSeconds}초`:"없음";document.getElementById("readyValue").textContent=state.ready.length;document.getElementById("transitValue").textContent=moving;document.getElementById("arrivedValue").textContent=state.arrived;document.getElementById("supplyValue").textContent=state.connected?"연결됨":"보급 단절";document.getElementById("roadValue").textContent=state.roadEnabled?"사용 가능":"임시 비활성";document.getElementById("toggleRoad").textContent=state.roadEnabled?"도로 임시 비활성화":"도로 다시 활성화";document.getElementById("queueList").innerHTML=state.queue.length?state.queue.map((x,i)=>`<li>${i+1}번째 · ${x.id} · ${x.progress.toFixed(1)}초</li>`).join(""):"<li>비어 있음</li>";document.getElementById("eventLog").innerHTML=state.events.slice(0,4).map(x=>`<li>${x}</li>`).join("")}
+      function loop(now){const delta=Math.min(.05,(now-last)/1000);last=now;advanceTransits(state,delta);render();requestAnimationFrame(loop)}
+      document.getElementById("enqueue").onclick=()=>enqueue(state);document.getElementById("advanceFive").onclick=()=>advanceProduction(state,5);document.getElementById("advanceTwenty").onclick=()=>advanceProduction(state,20);document.getElementById("dispatch").onclick=()=>dispatchReady(state);document.getElementById("toggleRoad").onclick=()=>{state.roadEnabled=!state.roadEnabled;state.events.unshift(state.roadEnabled?"도로 다시 활성화":"도로 임시 비활성화 · 보급 연결은 유지")};document.getElementById("intercept").onclick=()=>intercept(state);document.getElementById("cut").onclick=()=>cutCorridor(state);document.getElementById("restore").onclick=()=>restoreCorridor(state);document.getElementById("reset").onclick=()=>{state=createState()};requestAnimationFrame(loop);
+    }
+  </script>
+</body>
+</html>

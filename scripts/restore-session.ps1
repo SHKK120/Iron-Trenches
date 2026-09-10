@@ -74,6 +74,7 @@ $requiredFiles = @(
     'docs/지시장부.md',
     'previews/README.md',
     'previews/index.html',
+    'previews/RTS_CORE_03C_ProductionReinforcement.html',
     'previews/RTS_CORE_03B_TerrainRoadReinforcement.html',
     'previews/RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html',
     'previews/RTS_PLAYTEST_03A_SupplyStrategy.html',

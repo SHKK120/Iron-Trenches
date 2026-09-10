@@ -3,7 +3,8 @@
 `index.html`을 더블클릭하면 Preview Hub가 열린다. 모든 Preview는 별도 설치, 로컬 서버 또는 외부 CDN 없이 실행된다.
 
 - `index.html`: Preview 선택, 설명과 상태만 제공하는 Hub
-- `RTS_CORE_03B_TerrainRoadReinforcement.html`: 현재 Terrain Movement + Road Network + Physical Reinforcement 기술 Preview
+- `RTS_CORE_03C_ProductionReinforcement.html`: 현재 Production + Reinforcement Source Integration 기술 Preview
+- `RTS_CORE_03B_TerrainRoadReinforcement.html`: 이전 Terrain Movement + Road Network + Physical Reinforcement 기술 Preview
 - `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`: 사람 Gameplay Validation을 통과한 Terrain + Road + Physical Reinforcement Microgame
 - `RTS_PLAYTEST_03A_SupplyStrategy.html`: `[대체됨 — R1]` 단순 보급 차단 Gameplay Microgame
 - `RTS_CORE_03A_SupplyConnectivity.html`: 완료된 전략 보급 규칙/연결 판독 Preview
@@ -12,7 +13,17 @@
 - `RTS_CORE_02A_Economy.html`: 완료된 Sector Income + Economy Preview
 - `RTS_CORE_01C_Territory.html`: 완료된 Territory Graph + Control Anchor Preview
 
-## RTS-CORE-03B 현재 기술 시나리오
+## RTS-CORE-03C 현재 기술 시나리오
+
+- 단일 시험 경제 자원으로 생산 요청 비용을 지불하고 생산 시설별 FIFO Queue에 등록
+- 명시적 시간 진행과 초과 시간 소비로 Queue 선두부터 생산 완료
+- 생산 완료 병력은 전선이 아니라 실제 생산 시설의 Position/Sector에서 `Ready At Source`로 전환
+- `Ready At Source`를 기존 03B Dispatch에 연결해 Road 우선·Offroad fallback의 실제 `EnRoute → Arrived` 이동 수행
+- Cut Off 중에도 생산은 계속되지만 신규 Dispatch는 차단되며 Ready 객체와 ID는 보존
+- 연결 복구 뒤 같은 Ready 객체를 파견하고, 이동 중 파괴는 기존 `DestroyedEnRoute` 계약을 재사용
+- 생산 중 시설 소유권이 바뀌면 Queue를 이전·삭제하지 않고 `OwnershipConflict`로 안전하게 정지
+
+## RTS-CORE-03B 이전 기술 시나리오
 
 - TerrainMovementProfile과 Unity 비의존 Resolver 계약으로 Road 밖 이동 배율 판독
 - 자유 WorldPoint endpoint와 여러 TraversedSectorIds를 가진 RoadSegment, 고정 Road Slot 없음
@@ -55,14 +66,16 @@
 
 - 순수 C# Core와 `ManagedPcChecks`가 기술 정본이다.
 - `RTS_CORE_03A_SupplyConnectivity.html`은 Supply 규칙과 연결 판독용 Preview다.
-- `RTS_CORE_03B_TerrainRoadReinforcement.html`은 실제 C# Terrain/Road/Reinforcement 계약을 단계별로 확인하는 현재 기술 Preview다.
+- `RTS_CORE_03C_ProductionReinforcement.html`은 실제 C# Production→Ready At Source→기존 Dispatch 계약을 단계별로 확인하는 현재 기술 Preview다.
+- `RTS_CORE_03B_TerrainRoadReinforcement.html`은 Terrain/Road/Reinforcement 계약을 단계별로 확인하는 이전 기술 Preview다.
 - `RTS_PLAYTEST_03A_SupplyStrategy.html`은 단순 Supply Cut을 시험했던 이전 비정본 Gameplay Layer다.
 - `RTS_PLAYTEST_03A_R1_TerrainRoadInterdiction.html`은 Terrain, Road Infrastructure, 실제 Reinforcement 이동·요격과 Strategic Cut Off를 함께 검증해 사람 PASS를 받은 비정본 Gameplay Layer다.
 - Browser Preview와 Microgame은 사람의 조작·가독성·플레이 감각 확인용 표현 계층이다.
 - 보급 연결은 현재 소유권·인접 관계·보급원에서 파생하며 Preview JavaScript를 기술 정본으로 사용하지 않는다.
 - Microgame의 `Cut Off = 적 전방 Reinforcement 중단`은 사람 Playtest 전용 `[시험 규칙]`이며 C# Core나 최종 보급 규칙이 아니다.
 - R1/03B Fixture의 Terrain·Road 배율과 R1의 Forest/Rocky 전투 보조, 무료·즉시 Road 건설 및 Reinforcement 수치는 모두 `[시험값/시험 규칙]`이며 최종 Balance가 아니다.
-- 사용자 화면 문구는 한글을 기본으로 하고, 코드 식별자와 Result Bundle 번호만 필요한 범위에서 영어를 유지한다.
+- `[확정] HTML 사용자 인터페이스 언어 규칙`: 모든 Browser Preview와 Microgame의 사용자 화면·버튼·상태·조작 안내는 한국어를 기본으로 한다.
+- 코드 식별자와 Result Bundle 번호에는 영어를 유지할 수 있지만, 사용자 화면을 영어만으로 제공하지 않는다. 병기할 때는 한국어를 먼저 쓴다.
 - 사각형 Sector와 원형 Footprint는 Preview/검증용 시험 표현이며 최종 맵 Geometry나 Collider 확정이 아니다.
 - Preview PASS는 Unity Compile, Scene, 입력, 물리, 렌더링 또는 Play Mode PASS를 뜻하지 않는다.
 - 새 규칙을 Preview에 반영할 때는 같은 시작 상태, 조작과 기대 결과를 `ManagedPcChecks`에도 유지한다.
